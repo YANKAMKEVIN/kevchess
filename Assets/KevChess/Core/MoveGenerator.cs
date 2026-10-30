@@ -48,6 +48,7 @@ namespace KevChess.Core
 
         /// <summary>
         /// Coups pseudo-légaux. Avec capturesOnly, seulement les prises et les promotions (pour la quiescence).
+        /// Attention : ajoute à la liste sans la vider (contrairement à GenerateLegal).
         /// </summary>
         public static void GeneratePseudoLegal(Position pos, List<Move> moves, bool capturesOnly = false)
         {
