@@ -1,0 +1,20 @@
+{
+    "name": "KevChess.Editor",
+    "rootNamespace": "KevChess.EditorTools",
+    "references": [
+        "KevChess.Game",
+        "KevChess.Game.Visuals",
+        "KevChess.Game.Visuals.Editor",
+        "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.RenderPipelines.Core.Runtime"
+    ],
+    "includePlatforms": ["Editor"],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

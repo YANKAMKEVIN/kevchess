@@ -99,7 +99,7 @@ namespace KevChess.AI
         /// (sur le thread appelant) : la partie peut changer pendant la réflexion sans danger.
         /// Lève OperationCanceledException si ct est annulé.
         /// </summary>
-        public Task<Move> FindMoveAsync(Game game, Difficulty level, CancellationToken ct = default)
+        public Task<Move> FindMoveAsync(ChessGame game, Difficulty level, CancellationToken ct = default)
         {
             if (game == null) throw new ArgumentNullException(nameof(game));
             return FindMoveAsync(game.Position, new EngineOptions { Level = level }, ct);
@@ -183,14 +183,14 @@ namespace KevChess.AI
             lock (hintGate) return hint.Search(position, limits).BestMove;
         }
 
-        public Move SuggestMove(Game game, int timeMs = 800, CancellationToken ct = default)
+        public Move SuggestMove(ChessGame game, int timeMs = 800, CancellationToken ct = default)
         {
             if (game == null) throw new ArgumentNullException(nameof(game));
             return SuggestMove(game.Position, timeMs, ct);
         }
 
         /// <summary>Indice calculé hors du thread de rendu. Lève OperationCanceledException si ct est annulé.</summary>
-        public Task<Move> SuggestMoveAsync(Game game, int timeMs = 800, CancellationToken ct = default)
+        public Task<Move> SuggestMoveAsync(ChessGame game, int timeMs = 800, CancellationToken ct = default)
         {
             if (game == null) throw new ArgumentNullException(nameof(game));
             var copy = game.Position.Clone();

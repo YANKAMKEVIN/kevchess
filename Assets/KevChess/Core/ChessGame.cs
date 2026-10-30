@@ -21,7 +21,7 @@ namespace KevChess.Core
     /// Partie complète : coups légaux, historique (SAN), annulation et détection de fin de partie.
     /// Les nulles par répétition triple et règle des 50 coups sont déclarées automatiquement.
     /// </summary>
-    public sealed class Game
+    public sealed class ChessGame
     {
         readonly Position position;
         readonly string startFen;
@@ -29,9 +29,9 @@ namespace KevChess.Core
         readonly List<string> sanMoves = new List<string>();
         List<Move> legalMoves;
 
-        public Game() : this(Position.StartFen) { }
+        public ChessGame() : this(Position.StartFen) { }
 
-        public Game(string fen)
+        public ChessGame(string fen)
         {
             startFen = fen;
             position = Position.FromFen(fen);

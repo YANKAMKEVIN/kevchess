@@ -170,7 +170,7 @@ namespace KevChess.Tests
             var positions = new List<string>();
             for (int g = 0; g < 4; g++)
             {
-                var game = new Game();
+                var game = new ChessGame();
                 for (int ply = 0; ply < 80 && !game.IsOver; ply++)
                 {
                     positions.Add(game.Position.ToFen());
@@ -195,7 +195,7 @@ namespace KevChess.Tests
         [Test]
         public void SearchDoesNotModifyGamePosition()
         {
-            var game = new Game(Kiwipete);
+            var game = new ChessGame(Kiwipete);
             ulong hash = game.Position.Hash;
             new ChessAI(4).FindMove(game.Position, SearchLimits.Depth(4));
             Assert.That(game.Position.Hash, Is.EqualTo(hash));
@@ -235,7 +235,7 @@ namespace KevChess.Tests
         public void AsyncSearchCanBeCancelled()
         {
             var ai = new ChessAI(4);
-            var game = new Game(Kiwipete);
+            var game = new ChessGame(Kiwipete);
             using (var cts = new CancellationTokenSource())
             {
                 var sw = Stopwatch.StartNew();
@@ -276,7 +276,7 @@ namespace KevChess.Tests
         public async Task FindMoveAsyncOnGameAndHint()
         {
             var ai = new ChessAI(4, seed: 5);
-            var game = new Game();
+            var game = new ChessGame();
             var m = await ai.FindMoveAsync(game, Difficulty.Facile, CancellationToken.None);
             Assert.That(game.TryMakeMove(m), Is.True);
             var hint = await ai.SuggestMoveAsync(game, 100);
@@ -306,7 +306,7 @@ namespace KevChess.Tests
             var fens = new List<string>(EvalFens);
             // Plus des positions variées issues de parties IA contre IA.
             var ai = new ChessAI(4, seed: 11);
-            var game = new Game();
+            var game = new ChessGame();
             for (int ply = 0; ply < 60 && !game.IsOver; ply++)
             {
                 game.TryMakeMove(ai.FindMove(game.Position, new EngineOptions { Level = Difficulty.Debutant, MoveTimeMs = 20 }));
@@ -394,7 +394,7 @@ namespace KevChess.Tests
             int masterWins = 0, draws = 0;
             for (int g = 0; g < 4; g++)
             {
-                var game = new Game();
+                var game = new ChessGame();
                 var masterColor = g % 2 == 0 ? PieceColor.White : PieceColor.Black;
                 ai.NewGame();
                 for (int ply = 0; ply < 200 && !game.IsOver; ply++)
