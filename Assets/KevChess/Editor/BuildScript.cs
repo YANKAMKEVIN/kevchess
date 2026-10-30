@@ -27,6 +27,7 @@ namespace KevChess.EditorTools
         {
             EnsureScene();
             ConfigurePlayer();
+            ConfigureInputHandling();
             ConfigureRendering();
             AssetDatabase.SaveAssets();
             Debug.Log("[KevChess] Projet configuré");
@@ -46,7 +47,8 @@ namespace KevChess.EditorTools
         public static void BuildMac()
         {
             Setup();
-            PlayerSettings.SetScriptingBackend(NamedBuildTarget.Standalone, ScriptingImplementation.IL2CPP);
+            // Seul le module Mac Mono est installé (pas IL2CPP) : suffisant pour le prototype.
+            PlayerSettings.SetScriptingBackend(NamedBuildTarget.Standalone, ScriptingImplementation.Mono2x);
             Build(BuildTarget.StandaloneOSX, "Builds/macOS/KevChess.app");
         }
 
@@ -111,6 +113,24 @@ namespace KevChess.EditorTools
             PlayerSettings.SplashScreen.backgroundColor = new Color(0.02f, 0.02f, 0.05f);
         }
 
+        /// <summary>
+        /// Active Input Handling = Input System Package (1). Sans cela, aucune entrée n'arrive au jeu.
+        /// Le changement ne prend effet qu'au prochain lancement de l'éditeur.
+        /// </summary>
+        public static bool ConfigureInputHandling()
+        {
+            var assets = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/ProjectSettings.asset");
+            if (assets == null || assets.Length == 0) return false;
+            var so = new SerializedObject(assets[0]);
+            var prop = so.FindProperty("activeInputHandler");
+            if (prop == null || prop.intValue == 1) return false;
+            prop.intValue = 1;
+            so.ApplyModifiedPropertiesWithoutUndo();
+            AssetDatabase.SaveAssets();
+            Debug.LogWarning("[KevChess] Active Input Handling passé à Input System : relancer l'éditeur avant de builder.");
+            return true;
+        }
+
         /// <summary>Ajuste les assets URP existants (projet créé depuis le modèle URP) pour la DA néon.</summary>
         static void ConfigureRendering()
         {
@@ -131,8 +151,12 @@ namespace KevChess.EditorTools
                 a.supportsHDR = true;           // indispensable au bloom néon
                 a.msaaSampleCount = 4;
                 a.shadowDistance = 30f;
-                a.supportsSoftShadows = true;
                 a.renderScale = 1f;
+                // supportsSoftShadows a un setter interne en URP 17 : on passe par la sérialisation.
+                var so = new SerializedObject(a);
+                var soft = so.FindProperty("m_SoftShadowsSupported");
+                if (soft != null) soft.boolValue = true;
+                so.ApplyModifiedPropertiesWithoutUndo();
                 EditorUtility.SetDirty(a);
             }
             VisualsBuildSupport.Apply();

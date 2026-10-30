@@ -27,6 +27,7 @@ namespace KevChess.Game.App
         SoundBank sfx;
         PointerInput pointer;
         BoardInteraction interaction;
+        bool lastTapHitBoard;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Boot()
@@ -43,6 +44,7 @@ namespace KevChess.Game.App
             }
             Screen.sleepTimeout = SleepTimeout.NeverSleep;
 
+            DisableForeignSceneObjects();
             BuildCamera();
             BuildWorld();
 
@@ -55,15 +57,16 @@ namespace KevChess.Game.App
             BuildEventSystem();
             hud = new GameObject("Hud").AddComponent<Hud>();
             hud.transform.SetParent(transform, false);
-            hud.Build(match, orbit, sfx, board.ShowHint);
+            hud.Build(match, orbit, sfx, ShowHint);
 
             interaction = new BoardInteraction(match, board, hud, sfx, mainCamera);
 
             pointer = gameObject.AddComponent<PointerInput>();
-            pointer.Tapped += interaction.OnTap;
+            pointer.Tapped += p => lastTapHitBoard = interaction.OnTap(p);
             pointer.Dragged += d => { if (!hud.IsBlockingOverlayOpen) orbit.Orbit(d); };
             pointer.Zoomed += f => { if (!hud.IsBlockingOverlayOpen) orbit.Zoom(f); };
-            pointer.DoubleTapped += _ => { if (!hud.IsBlockingOverlayOpen) hud.ResetCamera(); };
+            // Double-tap hors plateau : recentrer (sur le plateau, les touchers servent à jouer).
+            pointer.DoubleTapped += _ => { if (!hud.IsBlockingOverlayOpen && !lastTapHitBoard) hud.ResetCamera(); };
 
             match.MoveStarted += OnMoveStarted;
             match.MoveLanded += OnMoveLanded;
@@ -73,8 +76,19 @@ namespace KevChess.Game.App
         {
             // Reprend la partie interrompue si elle existe, sinon plateau prêt pour une partie à deux.
             if (!match.ResumeSaved()) match.StartNew(new MatchSettings { Mode = MatchMode.LocalTwoPlayers });
-            orbit.SnapToView(match.ViewSide);
+            orbit.SnapToView(match.Settings.Mode == MatchMode.LocalTwoPlayers ? match.Game.SideToMove : match.ViewSide);
             hud.ShowMenu(true);
+        }
+
+        /// <summary>Lancé depuis une autre scène (Main Camera, Directional Light…) : on coupe ce qui doublonnerait.</summary>
+        void DisableForeignSceneObjects()
+        {
+            foreach (var cam in FindObjectsByType<Camera>())
+                if (!cam.transform.IsChildOf(transform)) cam.gameObject.SetActive(false);
+            foreach (var light in FindObjectsByType<Light>())
+                if (!light.transform.IsChildOf(transform)) light.enabled = false;
+            foreach (var listener in FindObjectsByType<AudioListener>())
+                if (!listener.transform.IsChildOf(transform)) listener.enabled = false;
         }
 
         void BuildCamera()
@@ -121,11 +135,13 @@ namespace KevChess.Game.App
         {
             // Bouton retour Android / Échap : ouvre ou ferme le menu.
             var kb = Keyboard.current;
-            if (kb != null && kb.escapeKey.wasPressedThisFrame)
-            {
-                hud.CancelPromotion();
-                hud.ShowMenu(!hud.IsBlockingOverlayOpen);
-            }
+            if (kb != null && kb.escapeKey.wasPressedThisFrame) hud.HandleBack();
+        }
+
+        void ShowHint(Move move)
+        {
+            interaction.ClearSelection();
+            board.ShowHint(move);
         }
 
         void OnMoveStarted(MoveVisual v)

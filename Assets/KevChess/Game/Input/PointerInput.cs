@@ -88,7 +88,11 @@ namespace KevChess.Game.Input
 
             float scroll = mouse.scroll.ReadValue().y;
             if (Mathf.Abs(scroll) > 0.01f && !IsOverUI(pos))
-                Zoomed?.Invoke(1f + Mathf.Clamp(scroll, -120f, 120f) * 0.0015f);
+            {
+                // Molette : crans de ±120 (ou ±1 selon la plateforme) ; trackpad : petits deltas continus.
+                float notches = Mathf.Abs(scroll) >= 20f ? scroll / 120f : scroll * 0.25f;
+                Zoomed?.Invoke(Mathf.Pow(1.12f, Mathf.Clamp(notches, -3f, 3f)));
+            }
 
             // Clic droit : orbite directe.
             if (mouse.rightButton.isPressed && !mouse.leftButton.isPressed)
@@ -135,8 +139,10 @@ namespace KevChess.Game.Input
             if (gestureBlocked || dragging || multiTouchSeen) return;
             if (Time.unscaledTime - pressTime > MaxTapSeconds) return;
 
+            // Chaque toucher est transmis ; le double-tap s'ajoute (deux touchers presque au même endroit).
             bool isDouble = Time.unscaledTime - lastTapTime < DoubleTapSeconds
-                            && (pos - lastTapPos).magnitude < dragThreshold * 3f;
+                            && (pos - lastTapPos).magnitude < dragThreshold;
+            Tapped?.Invoke(pos);
             if (isDouble)
             {
                 lastTapTime = -10f;
@@ -146,7 +152,6 @@ namespace KevChess.Game.Input
             {
                 lastTapTime = Time.unscaledTime;
                 lastTapPos = pos;
-                Tapped?.Invoke(pos);
             }
         }
 

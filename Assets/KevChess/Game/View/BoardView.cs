@@ -34,12 +34,14 @@ namespace KevChess.Game.View
         public void ShowPosition(Position position, PieceColor viewSide)
         {
             StopHint();
-            for (int sq = 0; sq < 64; sq++)
+            // Tous les enfants, y compris une victime retirée du tableau dont l'animation a été interrompue.
+            for (int i = piecesRoot.childCount - 1; i >= 0; i--)
             {
-                if (pieces[sq] != null) Destroy(pieces[sq].gameObject);
-                pieces[sq] = null;
+                var child = piecesRoot.GetChild(i).gameObject;
+                child.SetActive(false);
+                Destroy(child);
             }
-            // Les pièces en cours de capture (hors tableau) se détruisent d'elles-mêmes.
+            System.Array.Clear(pieces, 0, 64);
             for (int sq = 0; sq < 64; sq++)
             {
                 int p = position[sq];
@@ -102,6 +104,7 @@ namespace KevChess.Game.View
                 mover.Promote(ToKind(Piece.TypeOf(v.PromotedPiece)), () => done = true);
                 t = 0f;
                 while (!done && t < AnimationTimeout) { t += Time.deltaTime; yield return null; }
+                FitCollider(mover, ToKind(Piece.TypeOf(v.PromotedPiece)));
             }
 
             // Filet de sécurité : position finale exacte.
@@ -195,29 +198,38 @@ namespace KevChess.Game.View
 
         // ---------------------------------------------------------------- Picking
 
-        /// <summary>Case visée : d'abord les pièces (hautes, vues de biais), sinon le plateau.</summary>
-        public bool TryPickSquare(Ray ray, out int square)
+        /// <summary>
+        /// Cases visées par le rayon : celle de la pièce touchée (pièces hautes vues de biais)
+        /// et celle du plateau sous le rayon. L'une ou l'autre peut valoir Square.None.
+        /// </summary>
+        public bool TryPick(Ray ray, out int pieceSquare, out int boardSquare)
         {
-            square = Square.None;
-            var hits = Physics.RaycastAll(ray, 100f);
-            float best = float.MaxValue;
-            Vector3 point = Vector3.zero;
-            bool found = false;
-            foreach (var h in hits)
+            pieceSquare = boardSquare = Square.None;
+            int count = Physics.RaycastNonAlloc(ray, rayHits, 100f);
+            float bestPiece = float.MaxValue, bestBoard = float.MaxValue;
+            for (int i = 0; i < count; i++)
             {
-                if (h.distance >= best) continue;
-                bool isPiece = h.collider.GetComponentInParent<PieceView>() != null;
-                bool isBoard = h.collider.transform == transform || h.collider.transform.IsChildOf(transform);
-                if (!isPiece && !isBoard) continue;
-                best = h.distance;
-                point = isPiece ? h.collider.GetComponentInParent<PieceView>().transform.position : h.point;
-                found = true;
+                var h = rayHits[i];
+                var view = h.collider.GetComponentInParent<PieceView>();
+                if (view != null)
+                {
+                    if (h.distance < bestPiece && BoardBuilder.WorldToSquare(view.transform.position, out int f, out int r))
+                    {
+                        bestPiece = h.distance;
+                        pieceSquare = Square.Make(f, r);
+                    }
+                }
+                else if (h.collider.transform.IsChildOf(transform) && h.distance < bestBoard
+                         && BoardBuilder.WorldToSquare(h.point, out int bf, out int br))
+                {
+                    bestBoard = h.distance;
+                    boardSquare = Square.Make(bf, br);
+                }
             }
-            if (!found) return false;
-            if (!BoardBuilder.WorldToSquare(point, out int f, out int r)) return false;
-            square = Square.Make(f, r);
-            return true;
+            return pieceSquare != Square.None || boardSquare != Square.None;
         }
+
+        readonly RaycastHit[] rayHits = new RaycastHit[16];
 
         // ---------------------------------------------------------------- Outils
 
@@ -229,11 +241,12 @@ namespace KevChess.Game.View
             return view;
         }
 
-        static void EnsureCollider(PieceView view)
+        static void EnsureCollider(PieceView view) => FitCollider(view, view.Kind);
+
+        static void FitCollider(PieceView view, PieceKind kind)
         {
-            if (view.GetComponent<Collider>() != null) return;
-            var c = view.gameObject.AddComponent<CapsuleCollider>();
-            float h = PieceMeshFactory.Height(view.Kind);
+            if (!view.TryGetComponent<CapsuleCollider>(out var c)) c = view.gameObject.AddComponent<CapsuleCollider>();
+            float h = PieceMeshFactory.Height(kind);
             c.height = h;
             c.radius = 0.34f;
             c.center = new Vector3(0f, h * 0.5f, 0f);

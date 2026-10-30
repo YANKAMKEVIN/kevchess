@@ -37,7 +37,7 @@ namespace KevChess.Game.Visuals
             data.renderType = CameraRenderType.Base;
             data.renderPostProcessing = postProcessing;
             data.renderShadows = true;
-            data.antialiasing = AntialiasingMode.FastApproximateAntialiasing; // peu coûteux sur mobile
+            data.antialiasing = AntialiasingMode.None; // le MSAA de l'asset URP suffit : pas de FXAA en plus
             data.dithering = true; // évite le banding dans les dégradés sombres du ciel
             data.volumeLayerMask = data.volumeLayerMask | (1 << gameObject.layer);
         }

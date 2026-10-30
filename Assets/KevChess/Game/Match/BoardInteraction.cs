@@ -33,45 +33,53 @@ namespace KevChess.Game.Match
             match.StateChanged += () => { if (!match.CanHumanAct) ClearSelection(); };
         }
 
-        public void OnTap(Vector2 screenPos)
+        /// <summary>Traite un toucher ; renvoie vrai s'il a visé le plateau ou une pièce.</summary>
+        public bool OnTap(Vector2 screenPos)
         {
-            if (awaitingPromotion || hud.IsBlockingOverlayOpen) return;
-            if (!match.CanHumanAct) return;
-
-            if (!board.TryPickSquare(camera.ScreenPointToRay(screenPos), out int square))
+            if (awaitingPromotion || hud.IsBlockingOverlayOpen) return true;
+            if (!board.TryPick(camera.ScreenPointToRay(screenPos), out int pieceSquare, out int boardSquare))
             {
                 ClearSelection();
-                return;
+                return false;
+            }
+            if (!match.CanHumanAct) return true;
+
+            // Pièce touchée prenable : on la prend. Sinon une pièce haute peut masquer la case visée
+            // derrière elle : la case sous le rayon, si elle est une cible légale, l'emporte.
+            if (selected != Square.None)
+            {
+                if (TryFindTarget(pieceSquare, out var m1)) { Play(m1); return true; }
+                if (TryFindTarget(boardSquare, out var m2)) { Play(m2); return true; }
             }
 
             var game = match.Game;
-            int piece = game.Position[square];
-
-            if (selected != Square.None && TryFindTarget(square, out var move))
+            int square = pieceSquare != Square.None ? pieceSquare : boardSquare;
+            if (Piece.IsColor(game.Position[square], game.SideToMove))
             {
-                int from = selected;
-                ClearSelection();
-                if (move.IsPromotion) AskPromotion(from, square);
-                else match.TryHumanMove(from, square);
-                return;
-            }
-
-            if (Piece.IsColor(piece, game.SideToMove))
-            {
-                if (square == selected) { ClearSelection(); return; }
-                Select(square);
-                return;
+                if (square == selected) ClearSelection();
+                else Select(square);
+                return true;
             }
 
             if (selected != Square.None) sfx.Play(Sfx.Illegal, 0.6f);
             ClearSelection();
+            return true;
+        }
+
+        void Play(Move move)
+        {
+            int from = selected;
+            ClearSelection();
+            if (move.IsPromotion) AskPromotion(from, move.To);
+            else match.TryHumanMove(from, move.To);
         }
 
         bool TryFindTarget(int square, out Move move)
         {
+            move = Move.Null;
+            if (square == Square.None) return false;
             foreach (var m in targets)
                 if (m.To == square) { move = m; return true; }
-            move = Move.Null;
             return false;
         }
 

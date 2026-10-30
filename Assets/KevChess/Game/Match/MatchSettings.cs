@@ -75,9 +75,9 @@ namespace KevChess.Game.Match
                 }
                 return game;
             }
-            catch (FormatException)
+            catch (Exception)
             {
-                return null;
+                return null; // sauvegarde corrompue : on repart d'une partie neuve
             }
         }
     }

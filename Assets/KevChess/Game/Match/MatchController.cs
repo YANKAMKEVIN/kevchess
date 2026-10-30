@@ -108,26 +108,60 @@ namespace KevChess.Game.Match
         IEnumerator PlayRoutine(Move move)
         {
             IsAnimating = true;
-            var visual = MoveVisual.From(Game.Position, move);
-            Game.TryMakeMove(move);
-            if (Game.IsOver) SavedMatch.Clear();
-            else SavedMatch.Store(Settings, Game);
+            bool completed = false;
+            try
+            {
+                var visual = MoveVisual.From(Game.Position, move);
+                Game.TryMakeMove(move);
+                if (Game.IsOver) SavedMatch.Clear();
+                else SavedMatch.Store(Settings, Game);
 
-            MoveStarted?.Invoke(visual);
-            StateChanged?.Invoke();
-            yield return board.AnimateMove(visual);
-            board.ShowState(Game);
-            IsAnimating = false;
-            MoveLanded?.Invoke(visual);
-            StateChanged?.Invoke();
+                SafeInvoke(MoveStarted, visual);
+                StateChanged?.Invoke();
+                yield return board.AnimateMove(visual);
+                board.ShowState(Game);
+                completed = true;
+                IsAnimating = false;
+                SafeInvoke(MoveLanded, visual);
+            }
+            finally
+            {
+                // Une exception (ou un arrêt) ne doit jamais geler la partie.
+                IsAnimating = false;
+                if (!completed && Game != null)
+                {
+                    board.ShowPosition(Game.Position, ViewSide);
+                    board.ShowState(Game);
+                }
+            }
 
+            StateChanged?.Invoke();
             if (Game.IsOver) GameEnded?.Invoke();
             else MaybeStartAI();
         }
 
+        static void SafeInvoke(Action<MoveVisual> handler, MoveVisual v)
+        {
+            try { handler?.Invoke(v); }
+            catch (Exception e) { Debug.LogException(e); }
+        }
+
+        /// <summary>Partie en pause (menu ouvert) : l'IA attend avant de jouer.</summary>
+        public bool Paused
+        {
+            get => paused;
+            set
+            {
+                if (paused == value) return;
+                paused = value;
+                if (!paused) MaybeStartAI();
+            }
+        }
+        bool paused;
+
         async void MaybeStartAI()
         {
-            if (!IsAITurn || IsAIThinking || IsAnimating) return;
+            if (paused || !IsAITurn || IsAIThinking || IsAnimating) return;
 
             int gen = generation;
             var cts = new CancellationTokenSource();
@@ -158,7 +192,8 @@ namespace KevChess.Game.Match
             }
 
             // Résultat périmé (annulation, nouvelle partie) : on l'ignore.
-            if (gen != generation || this == null || Game == null || !IsAITurn) { StateChanged?.Invoke(); return; }
+            if (this == null) return; // objet détruit (fermeture de l'app)
+            if (gen != generation || Game == null || !IsAITurn) { StateChanged?.Invoke(); return; }
 
             if (move.IsNull || !Game.IsLegal(move))
             {
@@ -210,7 +245,7 @@ namespace KevChess.Game.Match
 
         public void Resign()
         {
-            if (Game == null || Game.IsOver) return;
+            if (Game == null || Game.IsOver || IsAnimating) return;
             CancelAI();
             generation++;
             var loser = Settings.Mode == MatchMode.VersusAI ? Settings.HumanColor : Game.SideToMove;
@@ -230,7 +265,7 @@ namespace KevChess.Game.Match
             Move hint;
             try { hint = await AIAdapter.SuggestAsync(Game, CancellationToken.None); }
             catch (Exception e) { Debug.LogException(e); return; }
-            if (gen != generation || Game == null || Game.Moves.Count != ply || hint.IsNull) return;
+            if (this == null || gen != generation || Game == null || Game.Moves.Count != ply || hint.IsNull) return;
             onHint?.Invoke(hint);
         }
 

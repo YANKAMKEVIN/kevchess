@@ -190,7 +190,7 @@ namespace KevChess.Game.UI
 
             undoButton.interactable = game.Moves.Count > 0 && !match.IsAnimating;
             hintButton.interactable = match.CanHumanAct;
-            resignButton.interactable = !game.IsOver;
+            resignButton.interactable = !game.IsOver && !match.IsAnimating;
         }
 
         static string PlayerName(PieceColor color, MatchSettings s)
@@ -308,7 +308,7 @@ namespace KevChess.Game.UI
 
         void BuildAISetup()
         {
-            aiOverlay = Overlay("AISetup", out var card, 940, 1180, UIKit.Magenta);
+            aiOverlay = Overlay("AISetup", out var card, 940, 1300, UIKit.Magenta);
             UIKit.VStack(card, 24, 56);
 
             UIKit.Size(UIKit.Label("Title", card, "Contre l'IA", 72, UIKit.Magenta, TextAnchor.MiddleCenter, FontStyle.Bold), 110);
@@ -384,7 +384,12 @@ namespace KevChess.Game.UI
 
         void BuildPromotion()
         {
-            promoOverlay = Overlay("Promotion", out var card, 960, 420, UIKit.Cyan);
+            promoOverlay = Overlay("Promotion", out var card, 960, 440, UIKit.Cyan);
+            var dimButton = promoOverlay.AddComponent<Button>();
+            dimButton.transition = Selectable.Transition.None;
+            dimButton.onClick.AddListener(CancelPromotion);
+            // La carte absorbe ses propres clics : sinon ils remonteraient jusqu'au voile et annuleraient.
+            card.gameObject.AddComponent<Button>().transition = Selectable.Transition.None;
             UIKit.VStack(card, 20, 40);
             UIKit.Size(UIKit.Label("Title", card, "Promotion", 56, UIKit.Cyan, TextAnchor.MiddleCenter, FontStyle.Bold), 80);
             var row = UIKit.Rect("Choices", card);
@@ -408,7 +413,7 @@ namespace KevChess.Game.UI
             }, null, 40);
         }
 
-        /// <summary>Demande la pièce de promotion. Toucher en dehors annule (callback avec None).</summary>
+        /// <summary>Demande la pièce de promotion. Toucher en dehors de la carte annule (callback avec None).</summary>
         public void AskPromotion(Action<PieceType> onChosen)
         {
             promotionCallback = onChosen;
@@ -428,7 +433,7 @@ namespace KevChess.Game.UI
 
         void BuildEndScreen()
         {
-            endOverlay = Overlay("GameOver", out var card, 900, 760, UIKit.Cyan);
+            endOverlay = Overlay("GameOver", out var card, 900, 800, UIKit.Cyan);
             UIKit.VStack(card, 22, 50);
             endTitle = UIKit.Label("Title", card, "", 84, UIKit.Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
             UIKit.Size(endTitle, 120);
@@ -499,7 +504,7 @@ namespace KevChess.Game.UI
 
         void BuildConfirm()
         {
-            confirmOverlay = Overlay("Confirm", out var card, 860, 420, UIKit.Magenta);
+            confirmOverlay = Overlay("Confirm", out var card, 860, 440, UIKit.Magenta);
             UIKit.VStack(card, 24, 50);
             confirmText = UIKit.Label("Question", card, "", 46, UIKit.Text, TextAnchor.MiddleCenter, FontStyle.Bold);
             UIKit.Size(confirmText, 130);
@@ -554,7 +559,27 @@ namespace KevChess.Game.UI
             if (card != null) card.localScale = Vector3.one;
         }
 
-        void Update() => UpdateLayout();
+        void Update()
+        {
+            UpdateLayout();
+            // L'IA ne joue pas derrière le menu ou l'écran de réglages.
+            if (match != null) match.Paused = menuOverlay.activeSelf || aiOverlay.activeSelf;
+        }
+
+        /// <summary>Bouton retour Android / Échap : ferme l'écran du dessus, sinon ouvre le menu.</summary>
+        public void HandleBack()
+        {
+            if (promoOverlay.activeSelf) { CancelPromotion(); return; }
+            if (confirmOverlay.activeSelf) { Show(confirmOverlay, false); return; }
+            if (aiOverlay.activeSelf) { Show(aiOverlay, false); return; }
+            if (endOverlay.activeSelf) { Show(endOverlay, false); return; }
+            if (menuOverlay.activeSelf)
+            {
+                if (match.Game != null && !match.Game.IsOver) ShowMenu(false);
+                return;
+            }
+            ShowMenu(true);
+        }
 
         void UpdateLayout()
         {

@@ -111,6 +111,8 @@ namespace KevChess.Game.UI
                 oi.type = Image.Type.Sliced;
                 oi.color = (outlineColor ?? Cyan) * new Color(1, 1, 1, 0.55f);
                 oi.raycastTarget = false;
+                // Le liseré ne doit pas compter comme un élément des layout groups du panneau.
+                ol.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
             }
             return img;
         }
