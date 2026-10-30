@@ -47,30 +47,37 @@ cd ~/dev/kevchess/tests/KevChess.Tests && DOTNET_CLI_TELEMETRY_OPTOUT=1 /Applica
 
 Perf IA (Mac, .NET) : ~1,1–1,5 M nœuds/s, profondeur 10 en < 1 s depuis la position initiale. Non mesurée sur téléphone.
 
-## Vérification de compilation sans licence
+## Builds et recette (2026-10-30)
 
-Le code Unity n'a **jamais tourné** dans l'éditeur. Il compile (0 erreur) contre les DLL UnityEngine + les sources uGUI et Input System livrées avec l'éditeur, via un projet de vérification hors dépôt (scratchpad de session). Non compilés hors éditeur : `SceneAtmosphere.Urp.cs`, `NeonAssetGenerator.Urp.cs`, `Editor/BuildScript.cs` (dépendent d'URP / UnityEditor).
+Licence Unity Personal active (activée en CLI : `unity auth login` puis `unity license activate --personal --accept-eula`).
 
-## Bloquant actuel
+| Cible | Résultat |
+|---|---|
+| macOS (Mono, `Builds/macOS/KevChess.app`, 79 Mo) | Build OK, autotest vert : 16 coups scriptés (prises, roque, promotion), annulation, mat, partie contre l'IA (1er coup IA en 0,5 s) |
+| Android (IL2CPP arm64, `Builds/Android/KevChess.apk`, 31 Mo) | Build OK, installé sur **Galaxy A17** (SM-A175F, `adb -s R5GYB2R7W2Y`, accord de Kevin) : rendu 3D, menu, sélection au toucher, coups légaux affichés, 1. e4 e5 joués |
 
-**Licence Unity** : session expirée, aucune licence active. Kevin doit se connecter dans Unity Hub (licence Personal). Ensuite :
+Commandes :
+```bash
+U=/Applications/Unity/Hub/Editor/6000.6.3f1/Unity.app/Contents/MacOS/Unity
+$U -batchmode -quit -projectPath ~/dev/kevchess -executeMethod KevChess.EditorTools.BuildScript.BuildMac -logFile Logs/build-mac.log
+$U -batchmode -quit -projectPath ~/dev/kevchess -executeMethod KevChess.EditorTools.BuildScript.BuildAndroid -logFile Logs/build-android.log
+~/Library/Android/sdk/platform-tools/adb -s R5GYB2R7W2Y install -r Builds/Android/KevChess.apk
+# Recette automatique avec captures (Mac) :
+Builds/macOS/KevChess.app/Contents/MacOS/KevChess -kevchess-autotest <dossier> -logFile <dossier>.log
+```
 
-1. Créer un projet depuis le modèle URP dans un dossier temporaire et récupérer `ProjectSettings/`, `Packages/` et les assets URP (`Assets/Settings/`), ou ouvrir `~/dev/kevchess` et ajouter URP + Input System via le Package Manager (API C# Client, pas d'édition à la main de `manifest.json`).
-2. Ouvrir une fois le projet : `NeonAssetGenerator` crée `Assets/KevChess/Game/Visuals/Resources/` (gabarits de matériaux, profil de volume) → à committer.
-3. `KevChess > Configurer le projet` (scène `Assets/Scenes/Main.unity`, PlayerSettings, HDR/MSAA/ombres URP, variantes de brouillard).
-4. Active Input Handling = Input System Package.
-5. Builds :
-   ```bash
-   /Applications/Unity/Hub/Editor/6000.6.3f1/Unity.app/Contents/MacOS/Unity -batchmode -quit -projectPath ~/dev/kevchess -executeMethod KevChess.EditorTools.BuildScript.BuildMac -logFile -
-   /Applications/Unity/Hub/Editor/6000.6.3f1/Unity.app/Contents/MacOS/Unity -batchmode -quit -projectPath ~/dev/kevchess -executeMethod KevChess.EditorTools.BuildScript.BuildAndroid -logFile -
-   ~/Library/Android/sdk/platform-tools/adb -s RFCX80Y0FVX install -r Builds/Android/KevChess.apk
-   ```
-6. Passe QA sur Mac puis sur le S24 (ou S21+ `RFCR40827ZZ`) : rendu, 60 fps, gestes, IA, sauvegarde.
+Pièges rencontrés :
+- URP 17 strippait toutes les variantes de `UberPost` sur Android (écran noir derrière l'UI) : « Strip Unused Post Processing Variants » désactivé dans `UniversalRenderPipelineGlobalSettings.asset`.
+- Mac : seul le module Mono est installé (pas IL2CPP).
+- L'app Mac se met en pause sans le focus (`runInBackground = false`) ; l'autotest force `runInBackground`.
+- La config URP (Packages, ProjectSettings, Assets/Settings) vient du modèle `com.unity.template.urp-blank` (qualités Mobile et PC).
 
 ## Prochaines étapes
 
-- [ ] Licence + premier lancement, corriger ce que la revue et le premier rendu révèlent
-- [ ] Prototype jouable sur Mac et APK installé sur le téléphone
+- [x] Licence + premier lancement, corrections de la revue
+- [x] Prototype jouable sur Mac et APK installé sur le téléphone (Galaxy A17)
+- [ ] Passe QA manuelle par Kevin (IA sur téléphone, gestes caméra, sons, promotion, sauvegarde)
+- [ ] Portrait : plateau un peu petit, envisager un cadrage plus serré
 - [ ] Réglages visuels réels (bloom, reflets, lisibilité des pièces de dessus en portrait)
 - [ ] Mesurer l'IA sur téléphone, ajuster les temps par niveau
 - [ ] Module iOS + build Xcode
