@@ -78,6 +78,8 @@ namespace KevChess.Game.App
             if (!match.ResumeSaved()) match.StartNew(new MatchSettings { Mode = MatchMode.LocalTwoPlayers });
             orbit.SnapToView(match.Settings.Mode == MatchMode.LocalTwoPlayers ? match.Game.SideToMove : match.ViewSide);
             hud.ShowMenu(true);
+
+            if (AutoTest.Requested(out var folder)) gameObject.AddComponent<AutoTest>().Run(match, hud, folder);
         }
 
         /// <summary>Lancé depuis une autre scène (Main Camera, Directional Light…) : on coupe ce qui doublonnerait.</summary>

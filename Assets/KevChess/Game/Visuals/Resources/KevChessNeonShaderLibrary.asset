@@ -1,0 +1,19 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7e22e7f6494f0492b8996516f58cef6e, type: 3}
+  m_Name: KevChessNeonShaderLibrary
+  m_EditorClassIdentifier: KevChess.Game.Visuals::KevChess.Game.Visuals.NeonShaderLibrary
+  litOpaqueEmissive: {fileID: 2100000, guid: f55866ed774c54d2eaa9efa9a37a575b, type: 2}
+  litTransparentEmissive: {fileID: 2100000, guid: 52db8922f17064efc832d5aa0accc8b3, type: 2}
+  particleAdditive: {fileID: 2100000, guid: ba862c5590fa7430abc3fd688e19670a, type: 2}
+  skyboxCubemap: {fileID: 2100000, guid: 63b8a2d15a63947af9e480b792982771, type: 2}
+  postProcessProfile: {fileID: 11400000, guid: e6ae49d9ade964c389671311da95b851, type: 2}

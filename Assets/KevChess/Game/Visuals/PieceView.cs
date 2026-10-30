@@ -282,7 +282,9 @@ namespace KevChess.Game.Visuals
             float time = Time.time;
 
             float hover = w * (hoverHeight + hoverBob * Mathf.Sin(time * 3.2f)) + _extraLift;
-            float yaw = IsWhite ? 0f : 180f;
+            // Le cavalier se montre de profil (sinon, vu de face, il n'est qu'une lame fine) ;
+            // les autres pièces regardent l'adversaire.
+            float yaw = Kind == PieceKind.Knight ? (IsWhite ? -90f : 90f) : (IsWhite ? 0f : 180f);
             float spin = w * Mathf.Sin(time * 1.3f) * 6f; // légère oscillation en sélection
 
             _visual.localPosition = new Vector3(0f, hover, 0f);
