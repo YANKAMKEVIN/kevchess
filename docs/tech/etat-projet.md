@@ -102,8 +102,8 @@ Pièges rencontrés :
 - [x] Mesurer l'IA sur téléphone (A17) ; budgets jugés corrects, inchangés
 - [ ] Revoir sur le S24 : portrait, pièces prises, temps IA
 - [x] Pièces prises en portrait : rangée proche lisible (plus grosse, penchée pour montrer son profil)
-- [ ] Mode « fantastique » (pouvoirs, plateau vivant, pièces incarnées) : conception en cours dans une autre session
 - [ ] Module iOS + build Xcode
 - [ ] V1.1 : Stockfish via `IChessEngine` (AIAdapter est le seul point à changer)
 - [x] Glisser-déposer, pièces prises en 3D, vibrations
+- [ ] Mode fantastique : conception validée dans `docs/design/mode-fantastique.md` (branche `design/mode-fantastique`), prochaine étape = 1 (règles de base dans `Core/Fantasy`)
 - [ ] Idées : horloge, thèmes, analyse de partie, export PGN
