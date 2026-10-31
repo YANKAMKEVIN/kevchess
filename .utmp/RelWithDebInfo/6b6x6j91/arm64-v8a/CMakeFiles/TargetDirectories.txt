@@ -1,5 +1,0 @@
-/Users/kevinyankam/dev/kevchess/.utmp/RelWithDebInfo/6b6x6j91/arm64-v8a/CMakeFiles/edit_cache.dir
-/Users/kevinyankam/dev/kevchess/.utmp/RelWithDebInfo/6b6x6j91/arm64-v8a/CMakeFiles/rebuild_cache.dir
-/Users/kevinyankam/dev/kevchess/.utmp/RelWithDebInfo/6b6x6j91/arm64-v8a/GameActivity/CMakeFiles/game.dir
-/Users/kevinyankam/dev/kevchess/.utmp/RelWithDebInfo/6b6x6j91/arm64-v8a/GameActivity/CMakeFiles/edit_cache.dir
-/Users/kevinyankam/dev/kevchess/.utmp/RelWithDebInfo/6b6x6j91/arm64-v8a/GameActivity/CMakeFiles/rebuild_cache.dir

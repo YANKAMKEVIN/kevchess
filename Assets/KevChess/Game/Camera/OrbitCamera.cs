@@ -14,20 +14,33 @@ namespace KevChess.Game.CameraRig
     {
         public Vector3 Target = new Vector3(0f, 0.2f, 0f);
         public float DefaultPitch = 52f;
+        /// <summary>Portrait : vue un peu plus plongeante, le plateau occupe mieux la hauteur.</summary>
+        public float PortraitPitch = 60f;
         public float MinPitch = 14f;
         public float MaxPitch = 86f;
-        public float MinDistance = 6f;
-        public float MaxDistance = 22f;
+        public float MinDistance = 5f;
+        public float MaxDistance = 30f;
+
+        /// <summary>Zones d'écran (viewport, origine en bas) laissées libres par l'interface.</summary>
+        public Rect PortraitFrame = new Rect(0.02f, 0.10f, 0.96f, 0.71f);
+        public Rect LandscapeFrame = new Rect(0.05f, 0.11f, 0.90f, 0.72f);
         public float OrbitSensitivity = 0.22f;
         public float Smoothing = 10f;
         public bool Parallax = true;
 
-        /// <summary>Demi-largeur du plateau cadre compris, pour adapter la distance au format d'écran.</summary>
-        public float BoardHalfExtent = 5.2f;
+        // Points à garder à l'écran : coins du plateau (coordonnées comprises) et sommets des pièces des rangées du fond.
+        static readonly Vector3[] FitPoints =
+        {
+            new Vector3(-4.35f, 0f, -4.35f), new Vector3(4.35f, 0f, -4.35f),
+            new Vector3(-4.35f, 0f, 4.35f), new Vector3(4.35f, 0f, 4.35f),
+            new Vector3(-3.5f, 1.15f, -3.5f), new Vector3(3.5f, 1.15f, -3.5f),
+            new Vector3(-3.5f, 1.15f, 3.5f), new Vector3(3.5f, 1.15f, 3.5f),
+        };
 
         Camera cam;
         float yaw, pitch, distance;
         float targetYaw, targetPitch, targetDistance;
+        Vector3 focusOffset, targetFocusOffset;
         Vector2 tilt, tiltBaseline;
         bool sensorEnabled;
 
@@ -37,8 +50,9 @@ namespace KevChess.Game.CameraRig
             cam.nearClipPlane = 0.1f;
             cam.farClipPlane = 200f;
             yaw = targetYaw = 0f;
-            pitch = targetPitch = DefaultPitch;
-            distance = targetDistance = FitDistance();
+            pitch = targetPitch = CurrentDefaultPitch;
+            distance = targetDistance = FitView(targetYaw, targetPitch, out targetFocusOffset);
+            focusOffset = targetFocusOffset;
             Apply(0f);
         }
 
@@ -76,8 +90,8 @@ namespace KevChess.Game.CameraRig
             float wanted = side == PieceColor.White ? 0f : 180f;
             // Tourner par le chemin le plus court.
             targetYaw = yaw + Mathf.DeltaAngle(yaw, wanted);
-            targetPitch = DefaultPitch;
-            targetDistance = FitDistance();
+            targetPitch = CurrentDefaultPitch;
+            targetDistance = FitView(targetYaw, targetPitch, out targetFocusOffset);
         }
 
         public void SnapToView(PieceColor side)
@@ -86,19 +100,66 @@ namespace KevChess.Game.CameraRig
             yaw = targetYaw;
             pitch = targetPitch;
             distance = targetDistance;
+            focusOffset = targetFocusOffset;
             Apply(0f);
         }
 
-        /// <summary>Distance pour voir tout le plateau, quel que soit le format (portrait téléphone ou paysage Mac).</summary>
-        float FitDistance()
+        bool IsPortrait => cam != null && cam.aspect < 1f;
+        float CurrentDefaultPitch => IsPortrait ? PortraitPitch : DefaultPitch;
+
+        /// <summary>
+        /// Cadrage exact : distance la plus courte qui garde le plateau dans la zone libre de l'écran,
+        /// et décalage du point visé pour l'y centrer. Valable en portrait (téléphone) comme en paysage (Mac).
+        /// </summary>
+        float FitView(float yawDeg, float pitchDeg, out Vector3 offset)
         {
+            offset = Vector3.zero;
             if (cam == null) return 12f;
-            // Portrait (téléphone) : champ plus large pour garder le plateau proche et la perspective marquée.
-            cam.fieldOfView = cam.aspect < 1f ? 56f : 40f;
-            float vHalf = cam.fieldOfView * 0.5f * Mathf.Deg2Rad;
-            float hHalf = Mathf.Atan(Mathf.Tan(vHalf) * cam.aspect);
-            float limiting = Mathf.Min(vHalf * 1.15f, hHalf);
-            return Mathf.Clamp(BoardHalfExtent / Mathf.Tan(limiting) + 1.5f, MinDistance, MaxDistance);
+            // Portrait : champ plus large pour garder la perspective marquée de près.
+            cam.fieldOfView = IsPortrait ? 52f : 40f;
+            var frame = IsPortrait ? PortraitFrame : LandscapeFrame;
+            var rot = Quaternion.Euler(pitchDeg, yawDeg, 0f);
+            float tanV = Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad);
+            float tanH = tanV * cam.aspect;
+
+            float d = 12f;
+            for (int pass = 0; pass < 3; pass++)
+            {
+                // Recherche dichotomique de la distance minimale où tout tient dans le cadre.
+                float lo = 2f, hi = 60f;
+                for (int i = 0; i < 30; i++)
+                {
+                    float mid = (lo + hi) * 0.5f;
+                    if (Fits(rot, Target + offset, mid, tanH, tanV, frame, out _, out _)) hi = mid;
+                    else lo = mid;
+                }
+                d = hi;
+
+                // Recentrage vertical dans le cadre (le haut et le bas de l'écran ne sont pas symétriques).
+                Fits(rot, Target + offset, d, tanH, tanV, frame, out var min, out var max);
+                float shift = (min.y + max.y) * 0.5f - frame.center.y;
+                float viewportHeightWorld = 2f * d * tanV;
+                offset += rot * Vector3.up * (shift * viewportHeightWorld);
+            }
+            return Mathf.Clamp(d, MinDistance, MaxDistance);
+        }
+
+        static bool Fits(Quaternion rot, Vector3 focus, float distance, float tanH, float tanV, Rect frame,
+                         out Vector2 min, out Vector2 max)
+        {
+            var camPos = focus + rot * new Vector3(0f, 0f, -distance);
+            var inv = Quaternion.Inverse(rot);
+            min = new Vector2(float.MaxValue, float.MaxValue);
+            max = new Vector2(float.MinValue, float.MinValue);
+            foreach (var p in FitPoints)
+            {
+                var local = inv * (p - camPos);
+                if (local.z <= 0.1f) return false;
+                var v = new Vector2(0.5f + 0.5f * local.x / (local.z * tanH), 0.5f + 0.5f * local.y / (local.z * tanV));
+                min = Vector2.Min(min, v);
+                max = Vector2.Max(max, v);
+            }
+            return min.x >= frame.xMin && max.x <= frame.xMax && max.y - min.y <= frame.height;
         }
 
         int lastWidth, lastHeight;
@@ -109,13 +170,16 @@ namespace KevChess.Game.CameraRig
             {
                 lastWidth = Screen.width;
                 lastHeight = Screen.height;
-                targetDistance = Mathf.Clamp(Mathf.Max(targetDistance, FitDistance() * 0.8f), MinDistance, MaxDistance);
+                // Rotation de l'écran : nouveau cadrage complet.
+                targetPitch = CurrentDefaultPitch;
+                targetDistance = FitView(targetYaw, targetPitch, out targetFocusOffset);
             }
 
             float k = 1f - Mathf.Exp(-Smoothing * Time.unscaledDeltaTime);
             yaw = Mathf.Lerp(yaw, targetYaw, k);
             pitch = Mathf.Lerp(pitch, targetPitch, k);
             distance = Mathf.Lerp(distance, targetDistance, k);
+            focusOffset = Vector3.Lerp(focusOffset, targetFocusOffset, k);
             UpdateTilt();
             Apply(Time.unscaledTime);
         }
@@ -139,7 +203,7 @@ namespace KevChess.Game.CameraRig
             float p = Mathf.Clamp(pitch + breathePitch - tilt.y * 7f, MinPitch - 3f, MaxPitch);
 
             var rot = Quaternion.Euler(p, y, 0f);
-            transform.position = Target + rot * new Vector3(0f, 0f, -distance);
+            transform.position = Target + focusOffset + rot * new Vector3(0f, 0f, -distance);
             transform.rotation = rot;
         }
     }

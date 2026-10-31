@@ -67,6 +67,8 @@ Builds/macOS/KevChess.app/Contents/MacOS/KevChess -kevchess-autotest <dossier> -
 ```
 
 Pièges rencontrés :
+- Désactiver le stripping des variantes de post-traitement fait perdre les ressources SSAO : la feature SSAO du renderer PC (modèle URP) faisait planter le pipeline sur Mac (écran noir). Feature retirée.
+- Le compilateur de shaders Unity plante parfois (« Lost connection with shader compiler ») : relancer le build.
 - URP 17 strippait toutes les variantes de `UberPost` sur Android (écran noir derrière l'UI) : « Strip Unused Post Processing Variants » désactivé dans `UniversalRenderPipelineGlobalSettings.asset`.
 - Mac : seul le module Mono est installé (pas IL2CPP).
 - L'app Mac se met en pause sans le focus (`runInBackground = false`) ; l'autotest force `runInBackground`.
@@ -77,7 +79,7 @@ Pièges rencontrés :
 - [x] Licence + premier lancement, corrections de la revue
 - [x] Prototype jouable sur Mac et APK installé sur le téléphone (Galaxy A17)
 - [ ] Passe QA manuelle par Kevin (IA sur téléphone, gestes caméra, sons, promotion, sauvegarde)
-- [ ] Portrait : plateau un peu petit, envisager un cadrage plus serré
+- [x] Cadrage exact par projection (plateau pleine largeur en portrait, centré hors interface)
 - [ ] Réglages visuels réels (bloom, reflets, lisibilité des pièces de dessus en portrait)
 - [ ] Mesurer l'IA sur téléphone, ajuster les temps par niveau
 - [ ] Module iOS + build Xcode
