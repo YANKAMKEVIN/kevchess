@@ -105,5 +105,5 @@ Pièges rencontrés :
 - [ ] Module iOS + build Xcode
 - [ ] V1.1 : Stockfish via `IChessEngine` (AIAdapter est le seul point à changer)
 - [x] Glisser-déposer, pièces prises en 3D, vibrations
-- [ ] Mode fantastique : conception validée dans `docs/design/mode-fantastique.md` (branche `design/mode-fantastique`), prochaine étape = 1 (règles de base dans `Core/Fantasy`)
+- [ ] Mode fantastique (« Légendes » à l'écran) : conception validée et questions tranchées dans `docs/design/mode-fantastique.md` (branche `design/mode-fantastique`), prochaine étape = 1 (règles de base dans `Core/Fantasy`)
 - [ ] Idées : horloge, thèmes, analyse de partie, export PGN

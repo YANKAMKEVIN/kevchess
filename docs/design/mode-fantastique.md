@@ -1,6 +1,8 @@
-# KevChess — Mode fantastique (document de conception)
+# KevChess — Mode « Légendes » (document de conception)
 
-Statut : **validé par Kevin le 2026-10-31** (les questions de la section 7 restent ouvertes, à trancher avant l'étape concernée).
+Nom à l'écran : **Légendes**. Dans le code et les documents techniques, on garde le mot « fantastique » (`Fantasy`).
+
+Statut : **validé par Kevin le 2026-10-31** ; questions de la section 7 tranchées le même jour.
 
 Dernière mise à jour : 2026-10-31.
 
@@ -10,7 +12,7 @@ Toujours des échecs : même plateau, mêmes pièces au départ, mêmes déplace
 le plateau vit, les pièces sont incarnées (soldats, mage, golem, reine guerrière, roi titan), elles se
 battent quand elles se prennent, et on gagne de l'énergie pour lancer des pouvoirs et réveiller un dragon.
 
-Le mode se choisit au menu (« Classique » / « Fantastique »), à deux en local ou contre l'IA (5 niveaux).
+Le mode se choisit au menu (« Classique » / « Légendes »), à deux en local ou contre l'IA (5 niveaux).
 
 ### Décisions de Kevin (2026-10-31)
 
@@ -23,6 +25,10 @@ Le mode se choisit au menu (« Classique » / « Fantastique »), à deux en loc
 | Pouvoirs de la V1 du mode | Bouclier, Gel, Téléportation, Souffle du dragon |
 | Pouvoir et coup | Un pouvoir **puis** un coup dans le même tour (au plus un pouvoir par tour) ; Téléportation et Souffle remplacent le coup |
 | IA | Sait jouer le mode dès la première version jouable |
+| Nom du mode | « Légendes » |
+| Seconde invocation | Non : une invocation par camp et par partie, même si le dragon meurt |
+| Bonus de centre | Seules les pièces autres que les pions comptent |
+| Duels par défaut | Longs partout, y compris contre l'IA (toucher pour passer, réglage court / désactivé) |
 
 ## 2. Règles exactes
 
@@ -40,7 +46,7 @@ Tout ce qui n'est pas dit ici suit les règles classiques (roque, prise en passa
 | Prendre un cavalier, un fou ou une tour | +2 |
 | Prendre une dame | +3 |
 | Prendre un dragon | +4 |
-| Occuper au moins 2 des 4 cases centrales (d4, e4, d5, e5) à la fin de son tour | +1 |
+| Occuper au moins 2 des 4 cases centrales (d4, e4, d5, e5) avec des pièces **autres que des pions**, à la fin de son tour | +1 |
 | Arrêter une pièce sur un gisement de cristal (§ 2.5) | +2 |
 
 - Une prise par le Souffle du dragon rapporte comme une prise normale. Une pièce tombée dans un gouffre
@@ -183,7 +189,7 @@ Variante selon la victime : un pion chancelle et tombe, une dame pare une fois a
 bouclier qui encaisse affiche des fissures hexagonales. Le coup final de la partie (mat) a une version
 plus longue (ralenti, couronne du roi qui tombe).
 
-Options : toucher l'écran passe le duel ; réglage « Duels : longs (défaut) / courts / désactivés ». Contre
+Options : toucher l'écran passe le duel ; réglage « Duels : longs (défaut, y compris contre l'IA) / courts / désactivés ». Contre
 l'IA, l'IA réfléchit pendant le duel.
 
 ### 3.3 Pouvoirs et plateau
@@ -316,19 +322,21 @@ Ces nombres sont un point de départ, ils seront ajustés à l'étape 8 :
 |---|---|
 | Jauge max / éclats au départ | 10 / 1 |
 | Coûts Bouclier / Gel / Téléportation / Invocation | 2 / 3 / 3 / 10 |
-| Bonus de centre | +1 si au moins 2 cases centrales occupées |
+| Bonus de centre | +1 si au moins 2 cases centrales occupées par des pièces hors pions |
 | Portée du dragon / du Souffle | 3 / 3 |
 | Recharge du Souffle | 1 Souffle tous les 3 tours |
 | Premier événement / fréquence / annonce | demi-coup 10 / 6 demi-coups / 4 demi-coups |
 | Durée d'un gouffre / des portails | 6 / 8 demi-coups |
 | Durée d'un duel long / court | 2,5 s / 1 s |
 
-## 7. Questions encore ouvertes
+## 7. Questions tranchées (2026-10-31)
 
-1. Nom du mode à l'écran : « Fantastique », ou un nom propre (par exemple « Cristal vivant ») ?
-2. Une seule invocation de dragon par partie et par camp : d'accord, ou une nouvelle invocation possible
-   si le dragon meurt ?
-3. Bonus de centre : risque que les jauges montent vite en ouverture ; on garde et on règle aux
-   auto-parties, ou on le réserve aux pièces autres que les pions ?
-4. Duels : la caméra rapprochée à chaque prise peut gêner en blitz contre l'IA ; garder « longs » par
-   défaut dans tous les cas ?
+1. Nom du mode à l'écran : **« Légendes »**.
+2. **Une seule invocation** de dragon par camp et par partie, même si le dragon meurt.
+3. Bonus de centre : **seules les pièces autres que les pions** comptent (évite une jauge pleine dès
+   l'ouverture et pousse à centraliser cavaliers et fous).
+4. Duels : **longs par défaut partout**, y compris contre l'IA ; toucher l'écran passe le duel et le
+   réglage permet de choisir court ou désactivé.
+
+Plus aucune question de conception n'est ouverte ; les nombres de la section 6 restent à équilibrer à
+l'étape 8.
