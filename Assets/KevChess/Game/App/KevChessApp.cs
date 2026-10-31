@@ -51,6 +51,8 @@ namespace KevChess.Game.App
             sfx = new GameObject("Sound").AddComponent<SoundBank>();
             sfx.transform.SetParent(transform, false);
 
+            board.TraysOnXSides = () => orbit.TraysOnXSides;
+
             match = gameObject.AddComponent<MatchController>();
             match.Init(board);
 
@@ -83,6 +85,7 @@ namespace KevChess.Game.App
             orbit.SnapToView(match.Settings.Mode == MatchMode.LocalTwoPlayers ? match.Game.SideToMove : match.ViewSide);
             hud.ShowMenu(true);
 
+            if (AIBench.Requested()) AIBench.Run();
             if (AutoTest.Requested(out var folder)) gameObject.AddComponent<AutoTest>().Run(match, hud, folder);
         }
 

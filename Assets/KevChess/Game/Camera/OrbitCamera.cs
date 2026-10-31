@@ -52,6 +52,10 @@ namespace KevChess.Game.CameraRig
         float yaw, pitch, distance;
         float targetYaw, targetPitch, targetDistance;
         Vector3 focusOffset, targetFocusOffset;
+        /// <summary>Zoom de l'utilisateur, relatif au cadrage exact (1 = cadrage « Vue »).</summary>
+        float zoomFactor = 1f;
+        int trayQuadrant;
+        float fittedYaw = float.NaN, fittedPitch = float.NaN;
         Vector2 tilt, tiltBaseline;
         bool sensorEnabled;
 
@@ -93,6 +97,22 @@ namespace KevChess.Game.CameraRig
         {
             if (factor <= 0f) return;
             targetDistance = Mathf.Clamp(targetDistance / factor, MinDistance, MaxDistance);
+            float fit = FitView(targetYaw, targetPitch, out _);
+            zoomFactor = targetDistance / Mathf.Max(0.01f, fit);
+        }
+
+        /// <summary>
+        /// Axe des rangées de pièces prises : sur les côtés de l'écran en paysage, devant/derrière en portrait.
+        /// Il dépend du quart de tour de la caméra (avec hystérésis pour ne pas basculer autour de 45°).
+        /// Vrai : rangées le long des colonnes a et h (x = ±…), faux : le long des rangées 1 et 8 (z = ±…).
+        /// </summary>
+        public bool TraysOnXSides => IsPortrait == ((trayQuadrant & 1) == 1);
+
+        void UpdateTrayQuadrant()
+        {
+            const float Hysteresis = 10f;
+            if (Mathf.Abs(Mathf.DeltaAngle(targetYaw, trayQuadrant * 90f)) > 45f + Hysteresis)
+                trayQuadrant = ((Mathf.RoundToInt(targetYaw / 90f) % 4) + 4) % 4;
         }
 
         /// <summary>Recentre la caméra derrière le camp donné (animé).</summary>
@@ -102,7 +122,18 @@ namespace KevChess.Game.CameraRig
             // Tourner par le chemin le plus court.
             targetYaw = yaw + Mathf.DeltaAngle(yaw, wanted);
             targetPitch = CurrentDefaultPitch;
-            targetDistance = FitView(targetYaw, targetPitch, out targetFocusOffset);
+            zoomFactor = 1f;
+            Refit();
+        }
+
+        /// <summary>Cadrage exact pour l'orientation visée, multiplié par le zoom de l'utilisateur.</summary>
+        void Refit()
+        {
+            UpdateTrayQuadrant();
+            float fit = FitView(targetYaw, targetPitch, out targetFocusOffset);
+            targetDistance = Mathf.Clamp(fit * zoomFactor, MinDistance, MaxDistance);
+            fittedYaw = targetYaw;
+            fittedPitch = targetPitch;
         }
 
         public void SnapToView(PieceColor side)
@@ -141,13 +172,13 @@ namespace KevChess.Game.CameraRig
                 for (int i = 0; i < 30; i++)
                 {
                     float mid = (lo + hi) * 0.5f;
-                    if (Fits(rot, Target + offset, mid, tanH, tanV, frame, IsPortrait, out _, out _)) hi = mid;
+                    if (Fits(rot, Target + offset, mid, tanH, tanV, frame, TraysOnXSides, out _, out _)) hi = mid;
                     else lo = mid;
                 }
                 d = hi;
 
                 // Recentrage vertical dans le cadre (le haut et le bas de l'écran ne sont pas symétriques).
-                Fits(rot, Target + offset, d, tanH, tanV, frame, IsPortrait, out var min, out var max);
+                Fits(rot, Target + offset, d, tanH, tanV, frame, TraysOnXSides, out var min, out var max);
                 float shift = (min.y + max.y) * 0.5f - frame.center.y;
                 float viewportHeightWorld = 2f * d * tanV;
                 offset += rot * Vector3.up * (shift * viewportHeightWorld);
@@ -155,14 +186,14 @@ namespace KevChess.Game.CameraRig
             return Mathf.Clamp(d, MinDistance, MaxDistance);
         }
 
-        static bool Fits(Quaternion rot, Vector3 focus, float distance, float tanH, float tanV, Rect frame, bool portrait,
+        static bool Fits(Quaternion rot, Vector3 focus, float distance, float tanH, float tanV, Rect frame, bool traysOnX,
                          out Vector2 min, out Vector2 max)
         {
             var camPos = focus + rot * new Vector3(0f, 0f, -distance);
             var inv = Quaternion.Inverse(rot);
             min = new Vector2(float.MaxValue, float.MaxValue);
             max = new Vector2(float.MinValue, float.MinValue);
-            var trays = portrait ? PortraitTrayPoints : LandscapeTrayPoints;
+            var trays = traysOnX ? LandscapeTrayPoints : PortraitTrayPoints;
             for (int i = 0; i < FitPoints.Length + trays.Length; i++)
             {
                 var p = i < FitPoints.Length ? FitPoints[i] : trays[i - FitPoints.Length];
@@ -185,8 +216,10 @@ namespace KevChess.Game.CameraRig
                 lastHeight = Screen.height;
                 // Rotation de l'écran : nouveau cadrage complet.
                 targetPitch = CurrentDefaultPitch;
-                targetDistance = FitView(targetYaw, targetPitch, out targetFocusOffset);
+                Refit();
             }
+            // Après une orbite, le cadrage suit l'orientation (pièces prises comprises) sans perdre le zoom.
+            else if (targetYaw != fittedYaw || targetPitch != fittedPitch) Refit();
 
             float k = 1f - Mathf.Exp(-Smoothing * Time.unscaledDeltaTime);
             yaw = Mathf.Lerp(yaw, targetYaw, k);

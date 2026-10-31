@@ -19,6 +19,17 @@ namespace KevChess.Game.Match
 
         public static void NewGame() => engine?.NewGame();
 
+        /// <summary>Résumé de la dernière réflexion de l'IA de jeu, pour le journal.</summary>
+        public static string LastSearchSummary()
+        {
+            if (engine == null) return "";
+            if (engine.LastFromBook) return "livre d'ouvertures";
+            var r = engine.LastResult;
+            return r == null ? "" : "profondeur " + r.Depth + ", " + r.Nodes + " nœuds, recherche " + r.ElapsedMs + " ms, " + r.NodesPerSecond + " nœuds/s";
+        }
+
+        public static Difficulty DifficultyOf(AILevel level) => ToDifficulty(level);
+
         static Difficulty ToDifficulty(AILevel level)
         {
             switch (level)

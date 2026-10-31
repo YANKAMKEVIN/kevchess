@@ -74,6 +74,9 @@ namespace KevChess.AI
         /// <summary>Résultat brut de la dernière recherche du moteur de jeu (diagnostic).</summary>
         public SearchResult LastResult { get; private set; }
 
+        /// <summary>Vrai si le dernier coup du moteur de jeu vient du livre d'ouvertures (pas de recherche).</summary>
+        public bool LastFromBook { get; private set; }
+
         /// <param name="hashMb">Taille de la table de transposition du moteur de jeu (l'indice utilise la moitié).</param>
         /// <param name="seed">Graine du hasard (tests reproductibles) ; null = aléatoire.</param>
         public ChessAI(int hashMb = 16, int? seed = null)
@@ -133,8 +136,10 @@ namespace KevChess.AI
             {
                 Move book;
                 lock (randomGate) book = OpeningBook.Pick(position, random);
-                if (!book.IsNull) return book;
+                LastFromBook = !book.IsNull;
+                if (LastFromBook) return book;
             }
+            LastFromBook = false;
 
             var limits = new SearchLimits
             {

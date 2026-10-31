@@ -248,19 +248,25 @@ namespace KevChess.Game.View
 
         Transform trayRoot;
         string trayKey;
-        bool trayPortrait;
+        bool trayOnX;
+
+        /// <summary>Axe des rangées fourni par la caméra (voir OrbitCamera.TraysOnXSides) ; à défaut, selon l'écran.</summary>
+        public System.Func<bool> TraysOnXSides;
+
+        bool CurrentTraysOnX => TraysOnXSides != null ? TraysOnXSides() : Screen.width > Screen.height;
 
         /// <summary>
         /// Pièces prises posées en miniature à côté du plateau : devant/derrière en portrait,
-        /// à gauche/à droite en paysage. Chaque camp garde de son côté les pièces qu'il a prises.
+        /// à gauche/à droite en paysage, quel que soit le quart de tour de la caméra.
+        /// Chaque camp garde de son côté du plateau les pièces qu'il a prises.
         /// </summary>
         Position lastPosition;
 
         void RefreshTrays(Position position)
         {
             lastPosition = position;
-            bool portrait = Screen.height >= Screen.width;
-            var sb = new System.Text.StringBuilder(portrait ? "P" : "L");
+            bool onX = CurrentTraysOnX;
+            var sb = new System.Text.StringBuilder(onX ? "X" : "Z");
             var missing = new int[2, 7];
             for (int c = 0; c < 2; c++)
                 for (int t = 1; t <= 5; t++)
@@ -275,7 +281,7 @@ namespace KevChess.Game.View
             string key = sb.ToString();
             if (key == trayKey) return;
             trayKey = key;
-            trayPortrait = portrait;
+            trayOnX = onX;
 
             for (int i = trayRoot.childCount - 1; i >= 0; i--) Destroy(trayRoot.GetChild(i).gameObject);
 
@@ -286,15 +292,15 @@ namespace KevChess.Game.View
                 int index = 0;
                 foreach (var type in TrayOrder)
                     for (int n = 0; n < missing[victim, (int)type]; n++)
-                        SpawnTrayPiece(type, victim == 0, capturer == 0, index++, portrait);
+                        SpawnTrayPiece(type, victim == 0, capturer == 0, index++, onX);
             }
         }
 
-        void SpawnTrayPiece(PieceType type, bool whitePiece, bool whiteSide, int index, bool portrait)
+        void SpawnTrayPiece(PieceType type, bool whitePiece, bool whiteSide, int index, bool onX)
         {
             float along = -3.9f + index * TraySpacing;
             float side = whiteSide ? -TrayOffset : TrayOffset;
-            var pos = portrait ? new Vector3(whiteSide ? along : -along, 0f, side) : new Vector3(side, 0f, whiteSide ? along : -along);
+            var pos = onX ? new Vector3(side, 0f, whiteSide ? along : -along) : new Vector3(whiteSide ? along : -along, 0f, side);
             var view = PieceView.Create(ToKind(type), whitePiece, 0, 0, trayRoot);
             view.SetReflectionVisible(false);
             view.transform.position = pos;
@@ -303,9 +309,8 @@ namespace KevChess.Game.View
 
         void Update()
         {
-            // Rotation de l'écran : les plateaux de prises changent de côté.
-            bool portrait = Screen.height >= Screen.width;
-            if (trayKey != null && portrait != trayPortrait)
+            // Rotation de l'écran ou quart de tour de la caméra : les rangées de prises changent d'axe.
+            if (trayKey != null && CurrentTraysOnX != trayOnX)
             {
                 trayKey = null;
                 if (lastPosition != null) RefreshTrays(lastPosition);

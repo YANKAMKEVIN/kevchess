@@ -84,6 +84,19 @@ namespace KevChess.Game.App
             Check(match.Game.Moves.Count == moves.Length - 1, "annulation d'un coup");
             yield return Capture("apres_annulation");
 
+            // Orbite d'un quart de tour : les pièces prises doivent rester dans le cadre sans « Vue ».
+            var orbit = FindAnyObjectByType<CameraRig.OrbitCamera>();
+            float pixelsPerDegree = 1f / (orbit.OrbitSensitivity * 1080f / Mathf.Max(1f, Mathf.Min(Screen.width, Screen.height)));
+            foreach (float yawStep in new[] { 90f, 40f })
+            {
+                orbit.Orbit(new Vector2(yawStep * pixelsPerDegree, 0f));
+                yield return new WaitForSeconds(1.5f);
+                Check(TraysInView(), "pièces prises dans le cadre après orbite de " + yawStep + "°");
+                yield return Capture("orbite_" + yawStep);
+            }
+            hud.ResetCamera();
+            yield return new WaitForSeconds(1.5f);
+
             // Mat du berger.
             match.StartNew(new MatchSettings { Mode = MatchMode.LocalTwoPlayers });
             foreach (var san in new[] { "e4", "e5", "Bc4", "Nc6", "Qh5", "Nf6", "Qxf7#" })
@@ -117,6 +130,24 @@ namespace KevChess.Game.App
             Log(failures == 0 ? "TERMINÉ : OK" : "TERMINÉ : " + failures + " échec(s)");
             yield return new WaitForSeconds(0.5f);
             Application.Quit(failures == 0 ? 0 : 1);
+        }
+
+        static bool TraysInView()
+        {
+            var trays = GameObject.Find("CapturedTrays");
+            if (trays == null || trays.transform.childCount == 0) return false;
+            var cam = Camera.main;
+            foreach (var r in trays.GetComponentsInChildren<Renderer>())
+            {
+                if (!r.enabled) continue; // reflets masqués
+                var b = r.bounds;
+                foreach (var corner in new[] { b.min, b.max })
+                {
+                    var v = cam.WorldToViewportPoint(corner);
+                    if (v.z <= 0f || v.x < 0f || v.x > 1f || v.y < 0f || v.y > 1f) return false;
+                }
+            }
+            return true;
         }
 
         IEnumerator WaitIdle()

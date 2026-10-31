@@ -173,6 +173,8 @@ namespace KevChess.Game.Match
             try
             {
                 move = await AIAdapter.FindMoveAsync(Game, Settings.Level, cts.Token);
+                Debug.Log("[KevChess] IA " + MatchSettings.LevelName(Settings.Level) + " : " +
+                          Mathf.RoundToInt((Time.realtimeSinceStartup - started) * 1000f) + " ms (" + AIAdapter.LastSearchSummary() + ")");
                 float wait = MinAIThinkSeconds - (Time.realtimeSinceStartup - started);
                 if (wait > 0) await Task.Delay(TimeSpan.FromSeconds(wait), cts.Token);
             }
