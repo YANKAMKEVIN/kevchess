@@ -56,7 +56,7 @@ Licence Unity Personal active (activée en CLI : `unity auth login` puis `unity 
 | Cible | Résultat |
 |---|---|
 | macOS (Mono, `Builds/macOS/KevChess.app`, 79 Mo) | Build OK, autotest vert : 16 coups scriptés (prises, roque, promotion), annulation, mat, partie contre l'IA (1er coup IA en 0,5 s) |
-| Itération 2026-10-31 (glisser-déposer, pièces prises en 3D, vibrations, menu masqué sous l'écran IA) | Mac : autotest vert, pièces prises visibles sur les côtés en paysage. Android : APK installé sur le S24, bouton Vibrations vu au menu ; reste à tester au doigt (glisser, vibrations, pièces prises en portrait, écran IA) — le S24 était occupé par une autre session |
+| Itération 2026-10-31 (glisser-déposer, pièces prises en 3D, vibrations, menu masqué sous l'écran IA) | Mac : autotest vert, pièces prises visibles sur les côtés en paysage. Android (S24 `RFCX80Y0FVX`, paysage) : écran IA sans menu derrière, glisser-déposer (1. e4 d5 2. exd5), pion pris affiché à côté du plateau, dépôt interdit → pièce renvoyée, glisser sur une case vide → orbite, vibrations confirmées dans `dumpsys vibrator_manager` (8/16/32/22 ms). Non vu : pièces prises en portrait (téléphone resté en paysage) ; après une orbite de 90° les pièces prises peuvent sortir du cadre jusqu'au bouton « Vue » |
 | Android (IL2CPP arm64, `Builds/Android/KevChess.apk`, 31 Mo) | Build OK, installé sur **Galaxy A17** (SM-A175F, `adb -s R5GYB2R7W2Y`, accord de Kevin) : rendu 3D, menu, sélection au toucher, coups légaux affichés, 1. e4 e5 joués |
 
 Commandes :
