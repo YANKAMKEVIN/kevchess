@@ -243,6 +243,11 @@ namespace KevChess.Game.View
         const float TrayScale = 0.55f;
         const float TraySpacing = 0.56f;
         const float TrayOffset = 5.35f;
+        // Portrait : la rangée proche est vue presque de dessus, on la grossit et on la rapproche du cadre.
+        // (Valeurs reprises par OrbitCamera pour le cadrage.)
+        const float PortraitTrayScale = 0.68f;
+        const float PortraitTraySpacing = 0.6f;
+        const float PortraitTrayOffset = 5.0f;
         static readonly PieceType[] TrayOrder = { PieceType.Queen, PieceType.Rook, PieceType.Bishop, PieceType.Knight, PieceType.Pawn };
         static readonly int[] StartCount = { 0, 8, 2, 2, 2, 1, 0 }; // indexé par PieceType
 
@@ -266,7 +271,8 @@ namespace KevChess.Game.View
         {
             lastPosition = position;
             bool onX = CurrentTraysOnX;
-            var sb = new System.Text.StringBuilder(onX ? "X" : "Z");
+            bool portraitNow = Screen.height >= Screen.width;
+            var sb = new System.Text.StringBuilder(onX ? "X" : "Z").Append(portraitNow ? "P" : "L");
             var missing = new int[2, 7];
             for (int c = 0; c < 2; c++)
                 for (int t = 1; t <= 5; t++)
@@ -298,13 +304,15 @@ namespace KevChess.Game.View
 
         void SpawnTrayPiece(PieceType type, bool whitePiece, bool whiteSide, int index, bool onX)
         {
-            float along = -3.9f + index * TraySpacing;
-            float side = whiteSide ? -TrayOffset : TrayOffset;
+            bool portrait = Screen.height >= Screen.width;
+            float spacing = portrait ? PortraitTraySpacing : TraySpacing;
+            float along = -7f * spacing + index * spacing;
+            float side = (whiteSide ? -1f : 1f) * (portrait ? PortraitTrayOffset : TrayOffset);
             var pos = onX ? new Vector3(side, 0f, whiteSide ? along : -along) : new Vector3(whiteSide ? along : -along, 0f, side);
             var view = PieceView.Create(ToKind(type), whitePiece, 0, 0, trayRoot);
             view.SetReflectionVisible(false);
             view.transform.position = pos;
-            view.transform.localScale = Vector3.one * TrayScale;
+            view.transform.localScale = Vector3.one * (portrait ? PortraitTrayScale : TrayScale);
         }
 
         void Update()
@@ -314,6 +322,27 @@ namespace KevChess.Game.View
             {
                 trayKey = null;
                 if (lastPosition != null) RefreshTrays(lastPosition);
+            }
+            LeanTraysTowardCamera();
+        }
+
+        /// <summary>
+        /// Une pièce prise vue presque de dessus (rangée proche en portrait) n'est qu'un disque :
+        /// on la penche en arrière (à l'opposé de la caméra), pivot à la base, pour montrer son profil.
+        /// </summary>
+        void LeanTraysTowardCamera()
+        {
+            var cam = Camera.main;
+            if (cam == null) return;
+            for (int i = 0; i < trayRoot.childCount; i++)
+            {
+                var piece = trayRoot.GetChild(i);
+                Vector3 to = cam.transform.position - piece.position;
+                var flat = new Vector3(to.x, 0f, to.z);
+                if (flat.sqrMagnitude < 1e-4f) continue;
+                float elevation = Mathf.Atan2(to.y, flat.magnitude) * Mathf.Rad2Deg;
+                float tilt = Mathf.Clamp(elevation - 35f, 0f, 35f);
+                piece.rotation = Quaternion.AngleAxis(tilt, Vector3.Cross(flat, Vector3.up).normalized);
             }
         }
 

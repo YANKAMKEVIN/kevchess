@@ -29,17 +29,23 @@ namespace KevChess.Game.CameraRig
         public bool Parallax = true;
 
         // Points à garder à l'écran : coins du plateau (coordonnées comprises), sommets des pièces des rangées du fond,
-        // et rangées de pièces prises (devant/derrière en portrait, sur les côtés en paysage).
-        static readonly Vector3[] PortraitTrayPoints =
+        // et extrémités des rangées de pièces prises (mêmes dimensions que BoardView, un peu de marge).
+        static readonly Vector3[] XTrayPoints = TrayPoints(true, 5.75f, 4.2f, 0.65f);
+        static readonly Vector3[] ZTrayPoints = TrayPoints(false, 5.75f, 4.2f, 0.65f);
+        static readonly Vector3[] PortraitXTrayPoints = TrayPoints(true, 5.4f, 4.5f, 0.8f);
+        static readonly Vector3[] PortraitZTrayPoints = TrayPoints(false, 5.4f, 4.5f, 0.8f);
+
+        static Vector3[] TrayPoints(bool onX, float side, float along, float height)
         {
-            new Vector3(-4.2f, 0.65f, -5.75f), new Vector3(4.2f, 0.65f, -5.75f),
-            new Vector3(-4.2f, 0.65f, 5.75f), new Vector3(4.2f, 0.65f, 5.75f),
-        };
-        static readonly Vector3[] LandscapeTrayPoints =
-        {
-            new Vector3(-5.75f, 0.65f, -4.2f), new Vector3(-5.75f, 0.65f, 4.2f),
-            new Vector3(5.75f, 0.65f, -4.2f), new Vector3(5.75f, 0.65f, 4.2f),
-        };
+            var pts = new Vector3[4];
+            for (int i = 0; i < 4; i++)
+            {
+                float s = (i & 1) == 0 ? -side : side, a = (i & 2) == 0 ? -along : along;
+                pts[i] = onX ? new Vector3(s, height, a) : new Vector3(a, height, s);
+            }
+            return pts;
+        }
+
         static readonly Vector3[] FitPoints =
         {
             new Vector3(-4.35f, 0f, -4.35f), new Vector3(4.35f, 0f, -4.35f),
@@ -108,6 +114,10 @@ namespace KevChess.Game.CameraRig
         /// </summary>
         public bool TraysOnXSides => IsPortrait == ((trayQuadrant & 1) == 1);
 
+        Vector3[] CurrentTrayPoints => IsPortrait
+            ? (TraysOnXSides ? PortraitXTrayPoints : PortraitZTrayPoints)
+            : (TraysOnXSides ? XTrayPoints : ZTrayPoints);
+
         void UpdateTrayQuadrant()
         {
             const float Hysteresis = 10f;
@@ -172,13 +182,13 @@ namespace KevChess.Game.CameraRig
                 for (int i = 0; i < 30; i++)
                 {
                     float mid = (lo + hi) * 0.5f;
-                    if (Fits(rot, Target + offset, mid, tanH, tanV, frame, TraysOnXSides, out _, out _)) hi = mid;
+                    if (Fits(rot, Target + offset, mid, tanH, tanV, frame, CurrentTrayPoints, out _, out _)) hi = mid;
                     else lo = mid;
                 }
                 d = hi;
 
                 // Recentrage vertical dans le cadre (le haut et le bas de l'écran ne sont pas symétriques).
-                Fits(rot, Target + offset, d, tanH, tanV, frame, TraysOnXSides, out var min, out var max);
+                Fits(rot, Target + offset, d, tanH, tanV, frame, CurrentTrayPoints, out var min, out var max);
                 float shift = (min.y + max.y) * 0.5f - frame.center.y;
                 float viewportHeightWorld = 2f * d * tanV;
                 offset += rot * Vector3.up * (shift * viewportHeightWorld);
@@ -186,14 +196,13 @@ namespace KevChess.Game.CameraRig
             return Mathf.Clamp(d, MinDistance, MaxDistance);
         }
 
-        static bool Fits(Quaternion rot, Vector3 focus, float distance, float tanH, float tanV, Rect frame, bool traysOnX,
+        static bool Fits(Quaternion rot, Vector3 focus, float distance, float tanH, float tanV, Rect frame, Vector3[] trays,
                          out Vector2 min, out Vector2 max)
         {
             var camPos = focus + rot * new Vector3(0f, 0f, -distance);
             var inv = Quaternion.Inverse(rot);
             min = new Vector2(float.MaxValue, float.MaxValue);
             max = new Vector2(float.MinValue, float.MinValue);
-            var trays = traysOnX ? LandscapeTrayPoints : PortraitTrayPoints;
             for (int i = 0; i < FitPoints.Length + trays.Length; i++)
             {
                 var p = i < FitPoints.Length ? FitPoints[i] : trays[i - FitPoints.Length];

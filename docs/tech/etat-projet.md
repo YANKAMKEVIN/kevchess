@@ -70,7 +70,7 @@ Licence Unity Personal active (activée en CLI : `unity auth login` puis `unity 
 |---|---|
 | macOS (Mono, `Builds/macOS/KevChess.app`, 79 Mo) | Build OK, autotest vert : 16 coups scriptés (prises, roque, promotion), annulation, mat, partie contre l'IA (1er coup IA en 0,5 s) |
 | Itération 2026-10-31 (glisser-déposer, pièces prises en 3D, vibrations, menu masqué sous l'écran IA) | Mac : autotest vert, pièces prises visibles sur les côtés en paysage. Android (S24 `RFCX80Y0FVX`, paysage) : écran IA sans menu derrière, glisser-déposer (1. e4 d5 2. exd5), pion pris affiché à côté du plateau, dépôt interdit → pièce renvoyée, glisser sur une case vide → orbite, vibrations confirmées dans `dumpsys vibrator_manager` (8/16/32/22 ms). Non vu : pièces prises en portrait (téléphone resté en paysage) ; après une orbite de 90° les pièces prises peuvent sortir du cadre jusqu'au bouton « Vue » |
-| Itération 2026-10-31 (pièces prises après orbite, temps IA) | Les rangées de pièces prises changent d'axe selon le quart de tour de la caméra (hystérésis de 10°) et le cadrage suit l'orbite en gardant le zoom (relatif au cadrage exact ; « Vue » le remet à 1). Autotest Mac : orbites 90° et 40° avec pièces prises vérifiées dans le cadre. Galaxy A17 en portrait : rangées au-dessus et au-dessous du plateau, visibles après des orbites de ~60° et ~120°. La rangée proche, vue de dessus, est petite (lisibilité à revoir). S24 non revu (débranché) |
+| Itération 2026-10-31 (pièces prises après orbite, temps IA) | Les rangées de pièces prises changent d'axe selon le quart de tour de la caméra (hystérésis de 10°) et le cadrage suit l'orbite en gardant le zoom (relatif au cadrage exact ; « Vue » le remet à 1). Autotest Mac : orbites 90° et 40° avec pièces prises vérifiées dans le cadre. Galaxy A17 en portrait : rangées au-dessus et au-dessous du plateau, visibles après des orbites de ~60° et ~120°. Rangée proche d'abord peu lisible (vue de dessus) : en portrait, pièces prises plus grosses (0,68) et rapprochées du cadre, et toutes les pièces prises se penchent en arrière (pivot à la base, jusqu'à 35°) quand on les voit de trop haut, pour montrer leur profil. Vérifié sur l'A17 (portrait) et le Mac (paysage). S24 non revu (débranché) |
 | Android (IL2CPP arm64, `Builds/Android/KevChess.apk`, 31 Mo) | Build OK, installé sur **Galaxy A17** (SM-A175F, `adb -s R5GYB2R7W2Y`, accord de Kevin) : rendu 3D, menu, sélection au toucher, coups légaux affichés, 1. e4 e5 joués |
 
 Commandes :
@@ -101,7 +101,7 @@ Pièges rencontrés :
 - [ ] Réglages visuels réels (bloom, reflets, lisibilité des pièces de dessus en portrait)
 - [x] Mesurer l'IA sur téléphone (A17) ; budgets jugés corrects, inchangés
 - [ ] Revoir sur le S24 : portrait, pièces prises, temps IA
-- [ ] Pièces prises en portrait : rangée proche peu lisible vue de dessus (rapprocher du plateau ou grossir ?)
+- [x] Pièces prises en portrait : rangée proche lisible (plus grosse, penchée pour montrer son profil)
 - [ ] Mode « fantastique » (pouvoirs, plateau vivant, pièces incarnées) : conception en cours dans une autre session
 - [ ] Module iOS + build Xcode
 - [ ] V1.1 : Stockfish via `IChessEngine` (AIAdapter est le seul point à changer)
