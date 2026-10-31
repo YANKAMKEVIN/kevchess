@@ -9,7 +9,7 @@ namespace KevChess.Game.Match
 {
     /// <summary>
     /// Sélection au toucher : toucher une pièce, puis une case en surbrillance.
-    /// Toucher une autre pièce de son camp change la sélection.
+    /// Toucher une autre pièce de son camp change la sélection. On peut aussi glisser-déposer la pièce.
     /// </summary>
     public sealed class BoardInteraction
     {
@@ -22,6 +22,8 @@ namespace KevChess.Game.Match
         int selected = Square.None;
         readonly List<Move> targets = new List<Move>();
         bool awaitingPromotion;
+        int dragFrom = Square.None;
+        bool dragStarted;
 
         public BoardInteraction(MatchController match, BoardView board, Hud hud, SoundBank sfx, Camera camera)
         {
@@ -32,6 +34,63 @@ namespace KevChess.Game.Match
             this.camera = camera;
             match.StateChanged += () => { if (!match.CanHumanAct) ClearSelection(); };
         }
+
+        // ---------------------------------------------------------------- Glisser-déposer
+
+        /// <summary>Un appui commence-t-il sur une pièce du camp au trait (glisser possible) ?</summary>
+        public bool CanStartDrag(Vector2 screenPos)
+        {
+            dragFrom = Square.None;
+            dragStarted = false;
+            if (awaitingPromotion || hud.IsBlockingOverlayOpen || !match.CanHumanAct) return false;
+            if (!board.TryPick(camera.ScreenPointToRay(screenPos), out int pieceSquare, out int boardSquare)) return false;
+            int square = pieceSquare != Square.None ? pieceSquare : boardSquare;
+            if (square == Square.None || !Piece.IsColor(match.Game.Position[square], match.Game.SideToMove)) return false;
+            dragFrom = square;
+            return true;
+        }
+
+        public void OnDrag(Vector2 screenPos)
+        {
+            if (dragFrom == Square.None || !match.CanHumanAct) return;
+            if (!dragStarted)
+            {
+                dragStarted = true;
+                if (selected != dragFrom) Select(dragFrom);
+            }
+            board.DragPiece(dragFrom, camera.ScreenPointToRay(screenPos));
+        }
+
+        public void OnDrop(Vector2 screenPos)
+        {
+            int from = dragFrom;
+            dragFrom = Square.None;
+            if (from == Square.None || !dragStarted) return;
+            dragStarted = false;
+
+            int to = BoardView.SquareUnder(camera.ScreenPointToRay(screenPos));
+            if (match.CanHumanAct && TryFindTarget(to, out var move))
+            {
+                Play(move);
+                return;
+            }
+            // Lâcher hors cible : retour sur la case d'origine, la sélection reste (on peut encore toucher une case).
+            board.ReturnPiece(from);
+            if (to != from && to != Square.None)
+            {
+                sfx.Play(Sfx.Illegal, 0.6f);
+                Haptics.Illegal();
+            }
+        }
+
+        public void OnDragCancelled()
+        {
+            if (dragFrom != Square.None && dragStarted) board.ReturnPiece(dragFrom);
+            dragFrom = Square.None;
+            dragStarted = false;
+        }
+
+        // ---------------------------------------------------------------- Toucher
 
         /// <summary>Traite un toucher ; renvoie vrai s'il a visé le plateau ou une pièce.</summary>
         public bool OnTap(Vector2 screenPos)
@@ -61,7 +120,11 @@ namespace KevChess.Game.Match
                 return true;
             }
 
-            if (selected != Square.None) sfx.Play(Sfx.Illegal, 0.6f);
+            if (selected != Square.None)
+            {
+                sfx.Play(Sfx.Illegal, 0.6f);
+                Haptics.Illegal();
+            }
             ClearSelection();
             return true;
         }
@@ -90,6 +153,7 @@ namespace KevChess.Game.Match
             targets.AddRange(match.Game.LegalMovesFrom(square));
             board.ShowSelection(square, targets);
             sfx.Play(Sfx.Select, 0.7f);
+            Haptics.Select();
         }
 
         public void ClearSelection()
@@ -108,7 +172,7 @@ namespace KevChess.Game.Match
             {
                 awaitingPromotion = false;
                 board.ClearSelection();
-                if (type != PieceType.None) match.TryHumanMove(from, to, type);
+                if (type == PieceType.None || !match.TryHumanMove(from, to, type)) board.ReturnPiece(from);
             });
         }
     }

@@ -110,6 +110,13 @@ namespace KevChess.Game.Visuals
             transform.position = WorldOf(file, rank);
         }
 
+        /// <summary>Glisser-déposer : la pièce suit le doigt (position monde), sans animation.</summary>
+        public void DragTo(Vector3 worldPosition)
+        {
+            StopMotion();
+            transform.position = worldPosition;
+        }
+
         /// <summary>Affiche ou masque le reflet miroir sous le verre.</summary>
         public void SetReflectionVisible(bool visible)
         {

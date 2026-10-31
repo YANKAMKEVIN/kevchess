@@ -27,6 +27,8 @@ namespace KevChess.Game.View
             highlights = BoardHighlights.Create(transform);
             piecesRoot = new GameObject("Pieces").transform;
             piecesRoot.SetParent(transform, false);
+            trayRoot = new GameObject("CapturedTrays").transform;
+            trayRoot.SetParent(transform, false);
         }
 
         // ---------------------------------------------------------------- IBoardPresenter
@@ -48,6 +50,7 @@ namespace KevChess.Game.View
                 if (p != Piece.Empty) pieces[sq] = Spawn(p, sq);
             }
             highlights.ClearAll();
+            RefreshTrays(position);
             selectedSquare = Square.None;
         }
 
@@ -114,6 +117,7 @@ namespace KevChess.Game.View
 
         public void ShowState(ChessGame game)
         {
+            RefreshTrays(game.Position);
             var last = game.LastMove;
             if (last.IsNull) highlights.ClearLastMove();
             else highlights.ShowLastMove(Square.File(last.From), Square.Rank(last.From), Square.File(last.To), Square.Rank(last.To));
@@ -194,6 +198,118 @@ namespace KevChess.Game.View
                 if (pieces[sq] != null && pieces[sq].IsSelected) pieces[sq].SetSelected(false);
             highlights.ClearSelection();
             highlights.ClearLegalMoves();
+        }
+
+        // ---------------------------------------------------------------- Glisser-déposer
+
+        const float DragLift = 0.45f;
+        static readonly Plane BoardPlane = new Plane(Vector3.up, Vector3.zero);
+
+        /// <summary>Point du plateau (y = 0) sous le rayon.</summary>
+        public static bool TryBoardPoint(Ray ray, out Vector3 point)
+        {
+            point = Vector3.zero;
+            if (!BoardPlane.Raycast(ray, out float d)) return false;
+            point = ray.GetPoint(d);
+            return true;
+        }
+
+        /// <summary>Case du plateau sous le rayon (ignore les pièces : sert au lâcher).</summary>
+        public static int SquareUnder(Ray ray)
+        {
+            if (!TryBoardPoint(ray, out var p) || !BoardBuilder.WorldToSquare(p, out int f, out int r)) return Square.None;
+            return Square.Make(f, r);
+        }
+
+        /// <summary>La pièce suit le doigt, soulevée au-dessus du plateau.</summary>
+        public void DragPiece(int square, Ray ray)
+        {
+            var piece = square >= 0 ? pieces[square] : null;
+            if (piece == null || !TryBoardPoint(ray, out var p)) return;
+            p.x = Mathf.Clamp(p.x, -4.6f, 4.6f);
+            p.z = Mathf.Clamp(p.z, -4.6f, 4.6f);
+            piece.DragTo(p + Vector3.up * DragLift);
+        }
+
+        /// <summary>Lâcher refusé : la pièce revient en glissant sur sa case.</summary>
+        public void ReturnPiece(int square)
+        {
+            var piece = square >= 0 ? pieces[square] : null;
+            if (piece != null) piece.MoveTo(Square.File(square), Square.Rank(square));
+        }
+
+        // ---------------------------------------------------------------- Pièces prises
+
+        const float TrayScale = 0.55f;
+        const float TraySpacing = 0.56f;
+        const float TrayOffset = 5.35f;
+        static readonly PieceType[] TrayOrder = { PieceType.Queen, PieceType.Rook, PieceType.Bishop, PieceType.Knight, PieceType.Pawn };
+        static readonly int[] StartCount = { 0, 8, 2, 2, 2, 1, 0 }; // indexé par PieceType
+
+        Transform trayRoot;
+        string trayKey;
+        bool trayPortrait;
+
+        /// <summary>
+        /// Pièces prises posées en miniature à côté du plateau : devant/derrière en portrait,
+        /// à gauche/à droite en paysage. Chaque camp garde de son côté les pièces qu'il a prises.
+        /// </summary>
+        Position lastPosition;
+
+        void RefreshTrays(Position position)
+        {
+            lastPosition = position;
+            bool portrait = Screen.height >= Screen.width;
+            var sb = new System.Text.StringBuilder(portrait ? "P" : "L");
+            var missing = new int[2, 7];
+            for (int c = 0; c < 2; c++)
+                for (int t = 1; t <= 5; t++)
+                {
+                    int count = 0;
+                    for (int sq = 0; sq < 64; sq++)
+                        if (position[sq] == Piece.Make((PieceColor)c, (PieceType)t)) count++;
+                    // Une promotion peut donner plus de pièces qu'au départ : on ne compte que les manquantes.
+                    missing[c, t] = Mathf.Max(0, StartCount[t] - count);
+                    sb.Append(missing[c, t]);
+                }
+            string key = sb.ToString();
+            if (key == trayKey) return;
+            trayKey = key;
+            trayPortrait = portrait;
+
+            for (int i = trayRoot.childCount - 1; i >= 0; i--) Destroy(trayRoot.GetChild(i).gameObject);
+
+            // Les blancs exposent les pièces noires prises de leur côté (z négatif), et inversement.
+            for (int capturer = 0; capturer < 2; capturer++)
+            {
+                int victim = 1 - capturer;
+                int index = 0;
+                foreach (var type in TrayOrder)
+                    for (int n = 0; n < missing[victim, (int)type]; n++)
+                        SpawnTrayPiece(type, victim == 0, capturer == 0, index++, portrait);
+            }
+        }
+
+        void SpawnTrayPiece(PieceType type, bool whitePiece, bool whiteSide, int index, bool portrait)
+        {
+            float along = -3.9f + index * TraySpacing;
+            float side = whiteSide ? -TrayOffset : TrayOffset;
+            var pos = portrait ? new Vector3(whiteSide ? along : -along, 0f, side) : new Vector3(side, 0f, whiteSide ? along : -along);
+            var view = PieceView.Create(ToKind(type), whitePiece, 0, 0, trayRoot);
+            view.SetReflectionVisible(false);
+            view.transform.position = pos;
+            view.transform.localScale = Vector3.one * TrayScale;
+        }
+
+        void Update()
+        {
+            // Rotation de l'écran : les plateaux de prises changent de côté.
+            bool portrait = Screen.height >= Screen.width;
+            if (trayKey != null && portrait != trayPortrait)
+            {
+                trayKey = null;
+                if (lastPosition != null) RefreshTrays(lastPosition);
+            }
         }
 
         // ---------------------------------------------------------------- Picking

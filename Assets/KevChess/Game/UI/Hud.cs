@@ -32,7 +32,7 @@ namespace KevChess.Game.UI
         GameObject hudGroup;
 
         GameObject menuOverlay, aiOverlay, promoOverlay, endOverlay, confirmOverlay;
-        Button continueButton, resumeButton, soundButton;
+        Button continueButton, resumeButton, soundButton, hapticsButton;
         Text endTitle, endReason;
         Action confirmAction;
         Text confirmText;
@@ -260,7 +260,7 @@ namespace KevChess.Game.UI
 
         void BuildMenu()
         {
-            menuOverlay = Overlay("Menu", out var card, 900, 1240, UIKit.Cyan);
+            menuOverlay = Overlay("Menu", out var card, 900, 1340, UIKit.Cyan);
             UIKit.VStack(card, 26, 56);
 
             var title = UIKit.Label("Title", card, "KEVCHESS", 110, UIKit.Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
@@ -286,7 +286,7 @@ namespace KevChess.Game.UI
                 ShowMenu(false);
             });
             UIKit.Size(local, 120);
-            var vsAI = UIKit.Button("VsAI", card, "Contre l'IA", () => { sfx.Play(Sfx.Click); Show(aiOverlay, true); }, UIKit.Magenta);
+            var vsAI = UIKit.Button("VsAI", card, "Contre l'IA", () => { sfx.Play(Sfx.Click); Show(menuOverlay, false); Show(aiOverlay, true); }, UIKit.Magenta);
             UIKit.Size(vsAI, 120);
             soundButton = UIKit.Button("Sound", card, "", () =>
             {
@@ -295,6 +295,14 @@ namespace KevChess.Game.UI
                 UpdateSoundLabel();
             });
             UIKit.Size(soundButton, 100);
+            hapticsButton = UIKit.Button("Haptics", card, "", () =>
+            {
+                Haptics.Enabled = !Haptics.Enabled;
+                sfx.Play(Sfx.Click);
+                Haptics.Select();
+                UpdateSoundLabel();
+            });
+            UIKit.Size(hapticsButton, 100);
             UpdateSoundLabel();
 
             if (Application.platform != RuntimePlatform.Android && Application.platform != RuntimePlatform.IPhonePlayer)
@@ -304,7 +312,11 @@ namespace KevChess.Game.UI
             }
         }
 
-        void UpdateSoundLabel() => UIKit.SetButtonText(soundButton, sfx.Muted ? "Son : coupé" : "Son : activé");
+        void UpdateSoundLabel()
+        {
+            UIKit.SetButtonText(soundButton, sfx.Muted ? "Son : coupé" : "Son : activé");
+            UIKit.SetButtonText(hapticsButton, Haptics.Enabled ? "Vibrations : activées" : "Vibrations : coupées");
+        }
 
         void BuildAISetup()
         {
@@ -340,7 +352,7 @@ namespace KevChess.Game.UI
             var row = UIKit.Rect("Actions", card);
             UIKit.HStack(row, 16);
             UIKit.Size(row.gameObject.AddComponent<LayoutElement>(), 120);
-            UIKit.Button("Back", row, "Retour", () => { sfx.Play(Sfx.Click); Show(aiOverlay, false); }, UIKit.TextDim);
+            UIKit.Button("Back", row, "Retour", () => { sfx.Play(Sfx.Click); Show(aiOverlay, false); ShowMenu(true); }, UIKit.TextDim);
             UIKit.Button("Play", row, "Jouer", StartAIMatch, UIKit.Magenta);
             RefreshAISetup();
         }
@@ -571,7 +583,7 @@ namespace KevChess.Game.UI
         {
             if (promoOverlay.activeSelf) { CancelPromotion(); return; }
             if (confirmOverlay.activeSelf) { Show(confirmOverlay, false); return; }
-            if (aiOverlay.activeSelf) { Show(aiOverlay, false); return; }
+            if (aiOverlay.activeSelf) { Show(aiOverlay, false); ShowMenu(true); return; }
             if (endOverlay.activeSelf) { Show(endOverlay, false); return; }
             if (menuOverlay.activeSelf)
             {

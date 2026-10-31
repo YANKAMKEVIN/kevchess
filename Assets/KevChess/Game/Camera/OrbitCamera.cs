@@ -28,7 +28,18 @@ namespace KevChess.Game.CameraRig
         public float Smoothing = 10f;
         public bool Parallax = true;
 
-        // Points à garder à l'écran : coins du plateau (coordonnées comprises) et sommets des pièces des rangées du fond.
+        // Points à garder à l'écran : coins du plateau (coordonnées comprises), sommets des pièces des rangées du fond,
+        // et rangées de pièces prises (devant/derrière en portrait, sur les côtés en paysage).
+        static readonly Vector3[] PortraitTrayPoints =
+        {
+            new Vector3(-4.2f, 0.65f, -5.75f), new Vector3(4.2f, 0.65f, -5.75f),
+            new Vector3(-4.2f, 0.65f, 5.75f), new Vector3(4.2f, 0.65f, 5.75f),
+        };
+        static readonly Vector3[] LandscapeTrayPoints =
+        {
+            new Vector3(-5.75f, 0.65f, -4.2f), new Vector3(-5.75f, 0.65f, 4.2f),
+            new Vector3(5.75f, 0.65f, -4.2f), new Vector3(5.75f, 0.65f, 4.2f),
+        };
         static readonly Vector3[] FitPoints =
         {
             new Vector3(-4.35f, 0f, -4.35f), new Vector3(4.35f, 0f, -4.35f),
@@ -130,13 +141,13 @@ namespace KevChess.Game.CameraRig
                 for (int i = 0; i < 30; i++)
                 {
                     float mid = (lo + hi) * 0.5f;
-                    if (Fits(rot, Target + offset, mid, tanH, tanV, frame, out _, out _)) hi = mid;
+                    if (Fits(rot, Target + offset, mid, tanH, tanV, frame, IsPortrait, out _, out _)) hi = mid;
                     else lo = mid;
                 }
                 d = hi;
 
                 // Recentrage vertical dans le cadre (le haut et le bas de l'écran ne sont pas symétriques).
-                Fits(rot, Target + offset, d, tanH, tanV, frame, out var min, out var max);
+                Fits(rot, Target + offset, d, tanH, tanV, frame, IsPortrait, out var min, out var max);
                 float shift = (min.y + max.y) * 0.5f - frame.center.y;
                 float viewportHeightWorld = 2f * d * tanV;
                 offset += rot * Vector3.up * (shift * viewportHeightWorld);
@@ -144,15 +155,17 @@ namespace KevChess.Game.CameraRig
             return Mathf.Clamp(d, MinDistance, MaxDistance);
         }
 
-        static bool Fits(Quaternion rot, Vector3 focus, float distance, float tanH, float tanV, Rect frame,
+        static bool Fits(Quaternion rot, Vector3 focus, float distance, float tanH, float tanV, Rect frame, bool portrait,
                          out Vector2 min, out Vector2 max)
         {
             var camPos = focus + rot * new Vector3(0f, 0f, -distance);
             var inv = Quaternion.Inverse(rot);
             min = new Vector2(float.MaxValue, float.MaxValue);
             max = new Vector2(float.MinValue, float.MinValue);
-            foreach (var p in FitPoints)
+            var trays = portrait ? PortraitTrayPoints : LandscapeTrayPoints;
+            for (int i = 0; i < FitPoints.Length + trays.Length; i++)
             {
+                var p = i < FitPoints.Length ? FitPoints[i] : trays[i - FitPoints.Length];
                 var local = inv * (p - camPos);
                 if (local.z <= 0.1f) return false;
                 var v = new Vector2(0.5f + 0.5f * local.x / (local.z * tanH), 0.5f + 0.5f * local.y / (local.z * tanV));

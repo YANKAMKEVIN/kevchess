@@ -63,6 +63,10 @@ namespace KevChess.Game.App
 
             pointer = gameObject.AddComponent<PointerInput>();
             pointer.Tapped += p => lastTapHitBoard = interaction.OnTap(p);
+            pointer.PieceGestureFilter = interaction.CanStartDrag;
+            pointer.PieceDragged += interaction.OnDrag;
+            pointer.PieceDropped += interaction.OnDrop;
+            pointer.PieceDragCancelled += interaction.OnDragCancelled;
             pointer.Dragged += d => { if (!hud.IsBlockingOverlayOpen) orbit.Orbit(d); };
             pointer.Zoomed += f => { if (!hud.IsBlockingOverlayOpen) orbit.Zoom(f); };
             // Double-tap hors plateau : recentrer (sur le plateau, les touchers servent à jouer).
@@ -158,7 +162,13 @@ namespace KevChess.Game.App
             else if (v.IsCapture) sfx.Play(Sfx.Capture);
             else sfx.Play(Sfx.Move);
 
-            if (match.Game.InCheck && !match.Game.IsOver) sfx.Play(Sfx.Check, 0.8f);
+            if (match.Game.InCheck && !match.Game.IsOver)
+            {
+                sfx.Play(Sfx.Check, 0.8f);
+                Haptics.Check();
+            }
+            else if (v.IsCapture) Haptics.Capture();
+            else Haptics.Land();
         }
 
         void OnApplicationPause(bool paused)

@@ -14,8 +14,8 @@ namespace KevChess.EditorTools
 {
     /// <summary>
     /// Configuration du projet et builds en ligne de commande :
-    ///   Unity -batchmode -quit -projectPath . -executeMethod KevChess.EditorTools.BuildScript.BuildAndroid
-    ///   Unity -batchmode -quit -projectPath . -executeMethod KevChess.EditorTools.BuildScript.BuildMac
+    ///   Unity -batchmode -quit -projectPath . -buildTarget Android -executeMethod KevChess.EditorTools.BuildScript.BuildAndroid
+    ///   Unity -batchmode -quit -projectPath . -buildTarget OSXUniversal -executeMethod KevChess.EditorTools.BuildScript.BuildMac
     /// </summary>
     public static class BuildScript
     {
@@ -54,6 +54,14 @@ namespace KevChess.EditorTools
 
         static void Build(BuildTarget target, string output)
         {
+            // Sans -buildTarget, l'éditeur démarre sur la cible du dernier build et URP peut retirer
+            // des passes de shaders pour la nouvelle cible (monde invisible sur mobile). On refuse.
+            if (Application.isBatchMode && EditorUserBuildSettings.activeBuildTarget != target)
+            {
+                Debug.LogError($"[KevChess] Lancer Unity avec -buildTarget {(target == BuildTarget.Android ? "Android" : "OSXUniversal")} (cible active : {EditorUserBuildSettings.activeBuildTarget})");
+                EditorApplication.Exit(3);
+                return;
+            }
             Directory.CreateDirectory(Path.GetDirectoryName(output));
             var options = new BuildPlayerOptions
             {

@@ -22,10 +22,19 @@ namespace KevChess.Game.Input
         public event Action<Vector2> Dragged;   // delta en pixels
         public event Action<float> Zoomed;      // facteur > 1 = rapprocher
 
+        /// <summary>
+        /// Appelé au début d'un appui : vrai si l'appui commence sur une pièce déplaçable.
+        /// Le glisser déplace alors la pièce (PieceDragged / PieceDropped) au lieu de tourner la caméra.
+        /// </summary>
+        public Func<Vector2, bool> PieceGestureFilter;
+        public event Action<Vector2> PieceDragged;
+        public event Action<Vector2> PieceDropped;
+        public event Action PieceDragCancelled;
+
         float dragThreshold;
         Vector2 pressStart, lastPos;
         float pressTime;
-        bool pressing, dragging, gestureBlocked, multiTouchSeen;
+        bool pressing, dragging, gestureBlocked, multiTouchSeen, pieceGesture;
         float lastPinchDistance;
         float lastTapTime = -10f;
         Vector2 lastTapPos;
@@ -52,6 +61,8 @@ namespace KevChess.Game.Input
             var touches = Touch.activeTouches;
             if (touches.Count >= 2)
             {
+                if (pieceGesture && dragging) PieceDragCancelled?.Invoke();
+                pieceGesture = false;
                 multiTouchSeen = true;
                 dragging = true;
                 if (gestureBlocked) return;
@@ -77,7 +88,8 @@ namespace KevChess.Game.Input
                     if (pressing) End(t.screenPosition);
                     break;
                 case UnityEngine.InputSystem.TouchPhase.Canceled:
-                    pressing = false;
+                    if (pieceGesture && dragging) PieceDragCancelled?.Invoke();
+                    pressing = pieceGesture = false;
                     break;
             }
         }
@@ -115,6 +127,7 @@ namespace KevChess.Game.Input
             pressStart = lastPos = pos;
             pressTime = Time.unscaledTime;
             gestureBlocked = IsOverUI(pos);
+            pieceGesture = !gestureBlocked && PieceGestureFilter != null && PieceGestureFilter(pos);
         }
 
         void Move(Vector2 pos)
@@ -125,7 +138,11 @@ namespace KevChess.Game.Input
                 dragging = true;
                 lastPos = pos;
             }
-            if (dragging && !multiTouchSeen)
+            if (dragging && pieceGesture)
+            {
+                PieceDragged?.Invoke(pos);
+            }
+            else if (dragging && !multiTouchSeen)
             {
                 Vector2 delta = pos - lastPos;
                 if (delta.sqrMagnitude > 0f) Dragged?.Invoke(delta);
@@ -136,6 +153,13 @@ namespace KevChess.Game.Input
         void End(Vector2 pos)
         {
             pressing = false;
+            if (pieceGesture && dragging)
+            {
+                pieceGesture = false;
+                PieceDropped?.Invoke(pos);
+                return;
+            }
+            pieceGesture = false; // appui bref sur une pièce : c'est un toucher normal
             if (gestureBlocked || dragging || multiTouchSeen) return;
             if (Time.unscaledTime - pressTime > MaxTapSeconds) return;
 
