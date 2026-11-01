@@ -19,7 +19,7 @@ namespace KevChess.Core.Fantasy
         static readonly PieceType[] Promotions = { PieceType.Queen, PieceType.Rook, PieceType.Bishop, PieceType.Knight };
 
         /// <summary>Nombre maximal de cibles de Bouclier et de Gel étudiées par l'IA.</summary>
-        public const int SearchPowerTargets = 3;
+        public const int SearchPowerTargets = 2;
 
         public static List<FantasyAction> Legal(FantasyPosition pos, GenMode mode = GenMode.All)
         {
@@ -49,10 +49,16 @@ namespace KevChess.Core.Fantasy
                     for (int i = 0; i < baseCount; i++)
                         if (list[i].Kind != ActionKind.Teleport) list.Add(list[i].WithPower(PowerKind.Shield, t));
 
+            // IA : le Gel n'est associé qu'aux prises (geler le défenseur puis prendre) et aux coups du roi.
             if (energy >= cfg.FreezeCost)
                 foreach (int t in FreezeTargets(pos, list, baseCount, mode))
                     for (int i = 0; i < baseCount; i++)
-                        if (list[i].Kind != ActionKind.Teleport) list.Add(list[i].WithPower(PowerKind.Freeze, t));
+                    {
+                        var a = list[i];
+                        if (a.Kind == ActionKind.Teleport) continue;
+                        if (mode == GenMode.Search && !a.IsCapture && a.From != pos.KingSquare(us)) continue;
+                        list.Add(a.WithPower(PowerKind.Freeze, t));
+                    }
 
             // Invocation : la tour devient dragon, puis un coup.
             if (energy >= cfg.SummonCost && !pos.HasSummoned(us))
@@ -121,8 +127,8 @@ namespace KevChess.Core.Fantasy
                 if (!Piece.IsColor(p, us) || Piece.TypeOf(p) == PieceType.King || pos.FrozenSquare(us) == sq) continue;
                 if (mode == GenMode.Search)
                 {
-                    // Seulement les pièces attaquées.
-                    if (!pos.IsSquareAttacked(sq, them)) continue;
+                    // Seulement les pièces attaquées qui valent au moins un cavalier.
+                    if (Piece.TypeOf(p) == PieceType.Pawn || !pos.IsSquareAttacked(sq, them)) continue;
                     if (found++ >= SearchPowerTargets) yield break;
                 }
                 yield return sq;
