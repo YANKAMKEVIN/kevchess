@@ -19,46 +19,62 @@ namespace KevChess.Game.Match
     }
 
     /// <summary>
-    /// Déroulement d'une partie : tours humain/IA, animations, annulation, indice, sauvegarde.
+    /// Déroulement d'une partie : tours humain/IA, pendule, animations, annulation, indice, sauvegarde, puzzles.
     /// </summary>
     public sealed class MatchController : MonoBehaviour
     {
         const float MinAIThinkSeconds = 0.45f;
 
+        const float PuzzleReplyDelay = 0.5f;
+
         IBoardPresenter board;
         CancellationTokenSource aiCts;
+        bool aiMovePending; // coup de l'IA calculé, en attente de la fin de la pause
         int generation; // invalide les résultats d'IA d'une partie précédente
 
         public ChessGame Game { get; private set; }
         public MatchSettings Settings { get; private set; } = new MatchSettings();
+        /// <summary>Pendule de la partie (sans limite par défaut).</summary>
+        public ChessClock Clock { get; private set; } = new ChessClock(TimeControl.Unlimited);
+        /// <summary>Puzzle en cours (mode Puzzle), sinon null.</summary>
+        public PuzzleSession Puzzle { get; private set; }
+        public bool IsPuzzle => Settings.Mode == MatchMode.Puzzle && Puzzle != null;
         public bool IsAnimating { get; private set; }
-        public bool IsAIThinking => aiCts != null;
-        public bool IsAITurn => Game != null && !Game.IsOver && !Settings.IsHuman(Game.SideToMove);
+        public bool IsAIThinking => aiCts != null || aiMovePending;
+        public bool IsAITurn => Game != null && !Game.IsOver && Settings.Mode == MatchMode.VersusAI && !Settings.IsHuman(Game.SideToMove);
+        /// <summary>Mode revue : le plateau montre une position passée, personne ne joue.</summary>
+        public bool Reviewing { get; set; }
 
         public bool CanHumanAct =>
-            Game != null && !Game.IsOver && !IsAnimating && !IsAIThinking && Settings.IsHuman(Game.SideToMove);
+            Game != null && !Game.IsOver && !IsAnimating && !IsAIThinking && !Reviewing && Settings.IsHuman(Game.SideToMove) &&
+            (Puzzle == null || !Puzzle.IsSolved);
 
         /// <summary>Camp vu « depuis le bas » : le joueur humain, ou le camp au trait en local.</summary>
-        public PieceColor ViewSide => Settings.Mode == MatchMode.VersusAI ? Settings.HumanColor : PieceColor.White;
+        public PieceColor ViewSide => Settings.Mode == MatchMode.LocalTwoPlayers ? PieceColor.White : Settings.HumanColor;
 
         public event Action StateChanged;
         public event Action<MoveVisual> MoveStarted;
         public event Action<MoveVisual> MoveLanded;
         public event Action NewMatchStarted;
         public event Action GameEnded;
+        /// <summary>Résultat d'un coup proposé dans un puzzle (après son animation).</summary>
+        public event Action<PuzzleMoveResult> PuzzleFeedback;
 
         public void Init(IBoardPresenter presenter) => board = presenter;
 
         public void StartNew(MatchSettings settings, string fen = null)
         {
-            CancelAI();
+            InvalidateAI();
             StopAllCoroutines();
             IsAnimating = false;
-            generation++;
+            Reviewing = false;
+            Puzzle = null;
             Settings = settings;
             Game = new ChessGame(fen ?? Position.StartFen);
+            Clock = new ChessClock(settings.Clock);
+            Clock.Start(Game.SideToMove);
             AIAdapter.NewGame();
-            SavedMatch.Store(Settings, Game);
+            SavedMatch.Store(Settings, Game, Clock);
             board.ShowPosition(Game.Position, ViewSide);
             board.ShowState(Game);
             NewMatchStarted?.Invoke();
@@ -77,12 +93,15 @@ namespace KevChess.Game.Match
             var save = SavedMatch.Load();
             var game = save?.Rebuild();
             if (game == null || game.IsOver) return false;
-            CancelAI();
+            InvalidateAI();
             StopAllCoroutines();
             IsAnimating = false;
-            generation++;
+            Reviewing = false;
+            Puzzle = null;
             Settings = save.Settings;
             Game = game;
+            Clock = save.RebuildClock();
+            Clock.Start(Game.SideToMove);
             board.ShowPosition(Game.Position, ViewSide);
             board.ShowState(Game);
             NewMatchStarted?.Invoke();
@@ -99,7 +118,7 @@ namespace KevChess.Game.Match
             {
                 if (m.From != from || m.To != to) continue;
                 if (m.IsPromotion && m.Promotion != (promotion == PieceType.None ? PieceType.Queen : promotion)) continue;
-                StartCoroutine(PlayRoutine(m));
+                StartCoroutine(IsPuzzle ? PuzzleRoutine(m) : PlayRoutine(m));
                 return true;
             }
             return false;
@@ -112,9 +131,11 @@ namespace KevChess.Game.Match
             try
             {
                 var visual = MoveVisual.From(Game.Position, move);
+                var mover = Game.SideToMove;
                 Game.TryMakeMove(move);
+                Clock.Press(mover);
                 if (Game.IsOver) SavedMatch.Clear();
-                else SavedMatch.Store(Settings, Game);
+                else SavedMatch.Store(Settings, Game, Clock);
 
                 SafeInvoke(MoveStarted, visual);
                 StateChanged?.Invoke();
@@ -146,6 +167,109 @@ namespace KevChess.Game.Match
             catch (Exception e) { Debug.LogException(e); }
         }
 
+        // ---------------------------------------------------------------- Puzzles
+
+        /// <summary>Lance un puzzle : position du problème, le joueur a le trait, l'adversaire répond seul.</summary>
+        public void StartPuzzle(Puzzle puzzle)
+        {
+            InvalidateAI();
+            StopAllCoroutines();
+            IsAnimating = false;
+            Reviewing = false;
+            Puzzle = new PuzzleSession(puzzle);
+            Game = Puzzle.Game;
+            Settings = new MatchSettings { Mode = MatchMode.Puzzle, HumanColor = Puzzle.PlayerColor, PuzzleId = puzzle.Id };
+            Clock = new ChessClock(TimeControl.Unlimited);
+            board.ShowPosition(Game.Position, ViewSide);
+            board.ShowState(Game);
+            NewMatchStarted?.Invoke();
+            StateChanged?.Invoke();
+        }
+
+        IEnumerator PuzzleRoutine(Move move)
+        {
+            IsAnimating = true;
+            bool completed = false;
+            PuzzleMoveResult result;
+            try
+            {
+                var visual = MoveVisual.From(Game.Position, move);
+                result = Puzzle.TryMove(move, out var reply);
+                if (result == PuzzleMoveResult.Wrong)
+                {
+                    // Coup faux : on le montre, puis la pièce revient à sa place.
+                    Game.TryMakeMove(move);
+                    SafeInvoke(MoveStarted, visual);
+                    StateChanged?.Invoke();
+                    yield return board.AnimateMove(visual);
+                    PuzzleFeedback?.Invoke(result);
+                    yield return new WaitForSeconds(0.35f);
+                    var back = MoveVisual.From(Game.Position, new Move(move.To, move.From));
+                    Game.Undo();
+                    yield return board.AnimateMove(back);
+                    board.ShowPosition(Game.Position, ViewSide);
+                    board.ShowState(Game);
+                }
+                else
+                {
+                    // La réponse adverse est retirée le temps d'animer le coup du joueur, puis rejouée.
+                    if (!reply.IsNull) Game.Undo();
+                    SafeInvoke(MoveStarted, visual);
+                    StateChanged?.Invoke();
+                    yield return board.AnimateMove(visual);
+                    board.ShowState(Game);
+                    SafeInvoke(MoveLanded, visual);
+                    if (!reply.IsNull)
+                    {
+                        PuzzleFeedback?.Invoke(PuzzleMoveResult.Correct);
+                        yield return new WaitForSeconds(PuzzleReplyDelay);
+                        var replyVisual = MoveVisual.From(Game.Position, reply);
+                        Game.TryMakeMove(reply);
+                        SafeInvoke(MoveStarted, replyVisual);
+                        StateChanged?.Invoke();
+                        yield return board.AnimateMove(replyVisual);
+                        board.ShowState(Game);
+                        SafeInvoke(MoveLanded, replyVisual);
+                    }
+                    if (result == PuzzleMoveResult.Solved) PuzzleFeedback?.Invoke(result);
+                }
+                completed = true;
+            }
+            finally
+            {
+                IsAnimating = false;
+                if (!completed && Game != null)
+                {
+                    board.ShowPosition(Game.Position, ViewSide);
+                    board.ShowState(Game);
+                }
+            }
+            StateChanged?.Invoke();
+        }
+
+        // ---------------------------------------------------------------- Pendule
+
+        void Update()
+        {
+            if (Game == null || Game.IsOver || Clock == null || Clock.IsUnlimited) return;
+            // La pendule s'arrête quand un écran est ouvert et pendant les animations.
+            bool hold = paused || IsAnimating || Reviewing;
+            if (hold && !Clock.IsPaused) Clock.Pause();
+            else if (!hold && Clock.IsPaused) Clock.Resume();
+            Clock.Tick(Time.deltaTime);
+            if (Clock.IsFlagged(out var loser)) FlagFall(loser);
+        }
+
+        void FlagFall(PieceColor loser)
+        {
+            InvalidateAI();
+            Game.Timeout(loser);
+            SavedMatch.Clear();
+            board.ShowState(Game);
+            StateChanged?.Invoke();
+            GameEnded?.Invoke();
+        }
+
         /// <summary>Partie en pause (menu ouvert) : l'IA attend avant de jouer.</summary>
         public bool Paused
         {
@@ -172,7 +296,8 @@ namespace KevChess.Game.Match
             float started = Time.realtimeSinceStartup;
             try
             {
-                move = await AIAdapter.FindMoveAsync(Game, Settings.Level, cts.Token);
+                var aiSide = Game.SideToMove;
+                move = await AIAdapter.FindMoveAsync(Game, Settings.Level, Clock.Remaining(aiSide), Clock.Control.IncrementSeconds, cts.Token);
                 Debug.Log("[KevChess] IA " + MatchSettings.LevelName(Settings.Level) + " : " +
                           Mathf.RoundToInt((Time.realtimeSinceStartup - started) * 1000f) + " ms (" + AIAdapter.LastSearchSummary() + ")");
                 float wait = MinAIThinkSeconds - (Time.realtimeSinceStartup - started);
@@ -203,7 +328,19 @@ namespace KevChess.Game.Match
                 Debug.LogWarning("IA : coup invalide, premier coup légal joué à la place");
                 move = Game.LegalMoves[0];
             }
-            StartCoroutine(PlayRoutine(move));
+            if (!paused) { StartCoroutine(PlayRoutine(move)); return; }
+            // Un écran s'est ouvert pendant la réflexion : le coup attend qu'il se ferme.
+            aiMovePending = true;
+            StartCoroutine(PlayWhenUnpaused(move, gen));
+        }
+
+        IEnumerator PlayWhenUnpaused(Move move, int gen)
+        {
+            while (paused && gen == generation) yield return null;
+            if (gen != generation) yield break;
+            aiMovePending = false;
+            if (Game == null || !IsAITurn || !Game.IsLegal(move)) { StateChanged?.Invoke(); yield break; }
+            yield return PlayRoutine(move);
         }
 
         void CancelAI()
@@ -213,13 +350,20 @@ namespace KevChess.Game.Match
             aiCts = null;
         }
 
+        /// <summary>Annule la réflexion de l'IA et périme tout résultat en cours.</summary>
+        void InvalidateAI()
+        {
+            CancelAI();
+            aiMovePending = false;
+            generation++;
+        }
+
         /// <summary>Annule le dernier coup du joueur (et la réponse de l'IA le cas échéant).</summary>
         public bool UndoForHuman()
         {
-            if (Game == null || IsAnimating || Game.Moves.Count == 0) return false;
+            if (Game == null || IsAnimating || Game.Moves.Count == 0 || IsPuzzle) return false;
             bool wasThinking = IsAIThinking;
-            CancelAI();
-            generation++;
+            InvalidateAI();
 
             if (Settings.Mode == MatchMode.VersusAI)
             {
@@ -237,7 +381,9 @@ namespace KevChess.Game.Match
                 Game.Undo();
             }
 
-            SavedMatch.Store(Settings, Game);
+            if (Clock.IsFlagged(out _)) Clock = new ChessClock(Settings.Clock);
+            Clock.Start(Game.SideToMove); // les temps restants sont conservés
+            SavedMatch.Store(Settings, Game, Clock);
             board.ShowPosition(Game.Position, ViewSide);
             board.ShowState(Game);
             StateChanged?.Invoke();
@@ -247,15 +393,54 @@ namespace KevChess.Game.Match
 
         public void Resign()
         {
-            if (Game == null || Game.IsOver || IsAnimating) return;
-            CancelAI();
-            generation++;
+            if (Game == null || Game.IsOver || IsAnimating || IsPuzzle) return;
+            InvalidateAI();
             var loser = Settings.Mode == MatchMode.VersusAI ? Settings.HumanColor : Game.SideToMove;
             Game.Resign(loser);
             SavedMatch.Clear();
             board.ShowState(Game);
             StateChanged?.Invoke();
             GameEnded?.Invoke();
+        }
+
+        /// <summary>Nulle acceptée (par l'IA ou par l'autre joueur).</summary>
+        public void AgreeDraw()
+        {
+            if (Game == null || Game.IsOver || IsAnimating || IsPuzzle) return;
+            InvalidateAI();
+            Game.AgreeDraw();
+            SavedMatch.Clear();
+            board.ShowState(Game);
+            StateChanged?.Invoke();
+            GameEnded?.Invoke();
+        }
+
+        /// <summary>
+        /// Reprend la partie depuis le demi-coup donné (mode revue) : l'historique suivant est supprimé.
+        /// Faux si la position est déjà finale.
+        /// </summary>
+        public bool ResumeFrom(int ply)
+        {
+            if (Game == null || IsAnimating || IsPuzzle || ply < 0 || ply > Game.Moves.Count) return false;
+            var game = new ChessGame(Game.StartFen);
+            for (int i = 0; i < ply; i++)
+                if (!game.TryMakeMove(Game.Moves[i])) return false;
+            if (game.IsOver) return false;
+
+            InvalidateAI();
+            StopAllCoroutines();
+            Reviewing = false;
+            Game = game;
+            // Après une chute au temps, la pendule repart de la cadence de départ.
+            if (Clock.IsFlagged(out _)) Clock = new ChessClock(Settings.Clock);
+            Clock.Start(Game.SideToMove);
+            SavedMatch.Store(Settings, Game, Clock);
+            board.ShowPosition(Game.Position, ViewSide);
+            board.ShowState(Game);
+            NewMatchStarted?.Invoke();
+            StateChanged?.Invoke();
+            MaybeStartAI();
+            return true;
         }
 
         /// <summary>Demande un indice à l'IA pour le joueur au trait.</summary>

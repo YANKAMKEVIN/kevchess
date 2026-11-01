@@ -25,6 +25,7 @@ namespace KevChess.Game.App
         MatchController match;
         Hud hud;
         SoundBank sfx;
+        AmbientMusic music;
         PointerInput pointer;
         BoardInteraction interaction;
         bool lastTapHitBoard;
@@ -50,6 +51,10 @@ namespace KevChess.Game.App
 
             sfx = new GameObject("Sound").AddComponent<SoundBank>();
             sfx.transform.SetParent(transform, false);
+            music = AmbientMusic.Create(transform);
+
+            // Réglages enregistrés : thème, lisibilité, vitesse des animations.
+            GamePrefs.ApplyAll();
 
             board.TraysOnXSides = () => orbit.TraysOnXSides;
 
@@ -59,7 +64,8 @@ namespace KevChess.Game.App
             BuildEventSystem();
             hud = new GameObject("Hud").AddComponent<Hud>();
             hud.transform.SetParent(transform, false);
-            hud.Build(match, orbit, sfx, ShowHint);
+            hud.Build(match, orbit, sfx, board, ShowHint);
+            hud.SetMusic(music);
 
             interaction = new BoardInteraction(match, board, hud, sfx, mainCamera);
 
@@ -160,16 +166,10 @@ namespace KevChess.Game.App
 
         void OnMoveLanded(MoveVisual v)
         {
-            if (v.IsPromotion) sfx.Play(Sfx.Promote);
-            else if (v.IsCastle) sfx.Play(Sfx.Castle);
-            else if (v.IsCapture) sfx.Play(Sfx.Capture);
-            else sfx.Play(Sfx.Move);
+            bool mate = match.Game.EndReason == GameEndReason.Checkmate;
+            sfx.PlayForMove(v.IsCapture, v.IsCastle, v.IsPromotion, match.Game.InCheck, mate);
 
-            if (match.Game.InCheck && !match.Game.IsOver)
-            {
-                sfx.Play(Sfx.Check, 0.8f);
-                Haptics.Check();
-            }
+            if (match.Game.InCheck && !match.Game.IsOver) Haptics.Check();
             else if (v.IsCapture) Haptics.Capture();
             else Haptics.Land();
         }
@@ -177,7 +177,7 @@ namespace KevChess.Game.App
         void OnApplicationPause(bool paused)
         {
             if (paused && match != null && match.Game != null && !match.Game.IsOver)
-                SavedMatch.Store(match.Settings, match.Game);
+                SavedMatch.Store(match.Settings, match.Game, match.Clock);
         }
     }
 }

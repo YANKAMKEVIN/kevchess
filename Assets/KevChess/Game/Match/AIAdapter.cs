@@ -14,6 +14,24 @@ namespace KevChess.Game.Match
         public static Task<Move> FindMoveAsync(ChessGame game, AILevel level, CancellationToken ct) =>
             Engine.FindMoveAsync(game, ToDifficulty(level), ct);
 
+        /// <summary>
+        /// Coup de l'IA avec une pendule : le temps de réflexion du niveau est réduit pour ne pas tomber
+        /// (environ 1/30 du temps restant plus l'incrément).
+        /// </summary>
+        public static Task<Move> FindMoveAsync(ChessGame game, AILevel level, double remainingSeconds, int incrementSeconds, CancellationToken ct)
+        {
+            var difficulty = ToDifficulty(level);
+            if (double.IsInfinity(remainingSeconds)) return Engine.FindMoveAsync(game, difficulty, ct);
+            int levelMs = ChessAI.GetSettings(difficulty).MaxTimeMs;
+            double budget = (remainingSeconds / 30.0 + incrementSeconds * 0.8) * 1000.0;
+            int ms = (int)System.Math.Max(50, System.Math.Min(levelMs, budget));
+            return Engine.FindMoveAsync(game.Position, new EngineOptions { Level = difficulty, MoveTimeMs = ms }, ct);
+        }
+
+        /// <summary>L'IA (camp aiSide) accepte-t-elle la nulle proposée ?</summary>
+        public static Task<bool> AcceptsDrawAsync(ChessGame game, PieceColor aiSide, CancellationToken ct) =>
+            Engine.AcceptsDrawAsync(game, aiSide, ct);
+
         public static Task<Move> SuggestAsync(ChessGame game, CancellationToken ct) =>
             Engine.SuggestMoveAsync(game, 900, ct);
 
