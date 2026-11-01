@@ -187,6 +187,50 @@ namespace KevChess.Game.UI
             return h;
         }
 
+        /// <summary>
+        /// Liste défilante verticale (masquée) ; renvoie le conteneur où ajouter les lignes.
+        /// Le parent la dimensionne (LayoutElement flexible ou ancrage).
+        /// </summary>
+        public static RectTransform ScrollList(string name, Transform parent, float spacing, out ScrollRect scroll)
+        {
+            var view = Rect(name, parent);
+            var bg = view.gameObject.AddComponent<Image>();
+            bg.color = new Color(0f, 0f, 0f, 0.18f); // capte aussi le glisser
+            view.gameObject.AddComponent<RectMask2D>();
+
+            var content = Rect("Content", view);
+            content.anchorMin = new Vector2(0f, 1f);
+            content.anchorMax = new Vector2(1f, 1f);
+            content.pivot = new Vector2(0.5f, 1f);
+            content.anchoredPosition = Vector2.zero;
+            content.sizeDelta = Vector2.zero;
+            var v = VStack(content, spacing, 8);
+            v.childAlignment = TextAnchor.UpperCenter;
+            content.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            scroll = view.gameObject.AddComponent<ScrollRect>();
+            scroll.content = content;
+            scroll.viewport = view;
+            scroll.horizontal = false;
+            scroll.movementType = ScrollRect.MovementType.Clamped;
+            scroll.scrollSensitivity = 40f;
+            return content;
+        }
+
+        /// <summary>Barre de progression : fond verre et remplissage néon ; renvoie le remplissage (anchorMax.x = avancement).</summary>
+        public static RectTransform ProgressBar(string name, Transform parent, Color accent)
+        {
+            var back = Panel(name, parent, new Color(0.08f, 0.10f, 0.20f, 0.85f), true, accent);
+            var fill = Panel("Fill", back.transform, accent * new Color(1f, 1f, 1f, 0.75f), false);
+            fill.raycastTarget = false;
+            var rt = fill.rectTransform;
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = new Vector2(0f, 1f);
+            rt.offsetMin = new Vector2(4, 4);
+            rt.offsetMax = new Vector2(-4, -4);
+            return rt;
+        }
+
         public static LayoutElement Size(Component c, float preferredHeight = -1, float preferredWidth = -1, float flexibleWidth = -1)
         {
             // Pas de « ?? » sur un objet Unity : GetComponent peut renvoyer un faux null dans l'éditeur.

@@ -138,6 +138,16 @@ namespace KevChess.Game.Visuals
             }
         }
 
+        void OnEnable() => VisualTheme.Changed += OnThemeChanged;
+        void OnDisable() => VisualTheme.Changed -= OnThemeChanged;
+
+        /// <summary>Le halo d'échec est une instance : on reprend la couleur du thème.</summary>
+        void OnThemeChanged()
+        {
+            if (_checkMaterial == null) return;
+            _checkBase = NeonMaterials.Check.GetColor(NeonMaterials.BaseColorProperty);
+        }
+
         void OnDestroy()
         {
             if (_checkMaterial != null) Destroy(_checkMaterial);

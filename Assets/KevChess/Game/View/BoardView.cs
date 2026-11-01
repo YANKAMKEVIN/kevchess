@@ -8,12 +8,24 @@ using UnityEngine;
 namespace KevChess.Game.View
 {
     /// <summary>
-    /// Plateau 3D synchronisé avec la partie : pièces, animations de coups, surbrillances et sélection au rayon.
+    /// Plateau 3D synchronisé avec la partie : pièces, animations de coups, surbrillances,
+    /// flèche d'indice, animation de mat et sélection au rayon.
     /// </summary>
     public sealed class BoardView : MonoBehaviour, IBoardPresenter
     {
-        const float AnimationTimeout = 4f;
+        const float AnimationTimeout = 8f;
         const float HintSeconds = 2.8f;
+
+        /// <summary>
+        /// Vitesse des animations de coup (déplacement, prise, roque, promotion) :
+        /// 0,5 = lent, 1 = normal, 2 = rapide. Bornée entre 0,25 et 4.
+        /// </summary>
+        public static float AnimationSpeed = 1f;
+
+        static float Speed => Mathf.Clamp(AnimationSpeed, 0.25f, 4f);
+
+        HintArrow hintArrow;
+        int arrowFrom = Square.None, arrowTo = Square.None;
 
         readonly PieceView[] pieces = new PieceView[64];
         BoardHighlights highlights;
@@ -29,6 +41,18 @@ namespace KevChess.Game.View
             piecesRoot.SetParent(transform, false);
             trayRoot = new GameObject("CapturedTrays").transform;
             trayRoot.SetParent(transform, false);
+            hintArrow = HintArrow.Create(transform);
+            VisualTheme.Changed += OnThemeChanged;
+        }
+
+        void OnDestroy()
+        {
+            VisualTheme.Changed -= OnThemeChanged;
+        }
+
+        void OnThemeChanged()
+        {
+            if (hintArrow != null && hintArrow.IsVisible) hintArrow.SetColor(ArrowColor(arrowFrom));
         }
 
         // ---------------------------------------------------------------- IBoardPresenter
@@ -36,6 +60,7 @@ namespace KevChess.Game.View
         public void ShowPosition(Position position, PieceColor viewSide)
         {
             StopHint();
+            ClearHintArrow();
             // Tous les enfants, y compris une victime retirée du tableau dont l'animation a été interrompue.
             for (int i = piecesRoot.childCount - 1; i >= 0; i--)
             {
@@ -57,6 +82,8 @@ namespace KevChess.Game.View
         public IEnumerator AnimateMove(MoveVisual v)
         {
             StopHint();
+            ClearHintArrow();
+            float speed = Speed;
             ClearSelection();
             highlights.ClearCheck();
 
@@ -80,8 +107,8 @@ namespace KevChess.Game.View
             mover.MoveTo(Square.File(move.To), Square.Rank(move.To), () =>
             {
                 landed = true;
-                if (victim != null) victim.Capture();
-            });
+                if (victim != null) victim.Capture(null, speed);
+            }, speed);
 
             PieceView rook = null;
             if (v.IsCastle)
@@ -89,8 +116,8 @@ namespace KevChess.Game.View
                 rook = pieces[v.RookFrom];
                 pieces[v.RookFrom] = null;
                 pieces[v.RookTo] = rook;
-                yield return new WaitForSeconds(0.12f);
-                if (rook != null) rook.MoveTo(Square.File(v.RookTo), Square.Rank(v.RookTo));
+                yield return new WaitForSeconds(0.12f / speed);
+                if (rook != null) rook.MoveTo(Square.File(v.RookTo), Square.Rank(v.RookTo), null, speed);
             }
 
             float t = 0f;
@@ -99,12 +126,12 @@ namespace KevChess.Game.View
                 t += Time.deltaTime;
                 yield return null;
             }
-            if (!landed && victim != null) victim.Capture();
+            if (!landed && victim != null) victim.Capture(null, speed);
 
             if (v.IsPromotion)
             {
                 bool done = false;
-                mover.Promote(ToKind(Piece.TypeOf(v.PromotedPiece)), () => done = true);
+                mover.Promote(ToKind(Piece.TypeOf(v.PromotedPiece)), () => done = true, speed);
                 t = 0f;
                 while (!done && t < AnimationTimeout) { t += Time.deltaTime; yield return null; }
                 FitCollider(mover, ToKind(Piece.TypeOf(v.PromotedPiece)));
@@ -168,10 +195,71 @@ namespace KevChess.Game.View
             highlights.ClearLegalMoves();
         }
 
+        /// <summary>Indice : surligne le coup quelques secondes et pose la flèche (qui reste jusqu'au prochain coup).</summary>
         public void ShowHint(Move move)
         {
             StopHint();
             hintRoutine = StartCoroutine(HintRoutine(move));
+            ShowHintArrow(move.From, move.To);
+        }
+
+        // ---------------------------------------------------------------- Flèche d'indice
+
+        /// <summary>
+        /// Flèche néon en arc de <paramref name="from"/> vers <paramref name="to"/> (cases 0–63).
+        /// Elle reste affichée jusqu'à <see cref="ClearHintArrow"/>, un coup animé ou <see cref="ShowPosition"/>.
+        /// </summary>
+        public void ShowHintArrow(int from, int to)
+        {
+            if (hintArrow == null || from < 0 || from > 63 || to < 0 || to > 63 || from == to) return;
+            arrowFrom = from;
+            arrowTo = to;
+            hintArrow.Show(BoardBuilder.SquareToWorld(Square.File(from), Square.Rank(from)),
+                BoardBuilder.SquareToWorld(Square.File(to), Square.Rank(to)), ArrowColor(from));
+        }
+
+        /// <summary>Retire la flèche d'indice (sans effet si elle n'est pas affichée).</summary>
+        public void ClearHintArrow()
+        {
+            arrowFrom = arrowTo = Square.None;
+            if (hintArrow != null) hintArrow.Hide();
+        }
+
+        /// <summary>Couleur de la flèche : surbrillance du thème teintée par la lueur de la pièce jouée.</summary>
+        Color ArrowColor(int from)
+        {
+            var piece = from >= 0 && from < 64 ? pieces[from] : null;
+            return piece != null ? Color.Lerp(NeonPalette.Selection, piece.GlowColor, 0.5f) : NeonPalette.Selection;
+        }
+
+        // ---------------------------------------------------------------- Mat
+
+        /// <summary>
+        /// Animation de mat (≈ 2 s) : le roi en <paramref name="kingSquare"/> vacille, bascule puis se brise ;
+        /// onde de choc sur le plateau et pluie d'étincelles de la couleur du gagnant.
+        /// Le roi reste absent du plateau ensuite (ShowPosition le remet, par exemple après annulation).
+        /// </summary>
+        public IEnumerator PlayMateAnimation(int kingSquare)
+        {
+            StopHint();
+            ClearHintArrow();
+            ClearSelection();
+            var king = kingSquare >= 0 && kingSquare < 64 ? pieces[kingSquare] : null;
+            if (king == null) yield break;
+
+            Color winner = NeonPalette.Glow(!king.IsWhite);
+            Vector3 center = king.transform.position;
+            bool shattered = false;
+            king.Checkmate(() => shattered = true);
+
+            float t = 0f;
+            while (!shattered && king != null && t < 3f) { t += Time.deltaTime; yield return null; }
+            highlights.ClearCheck();
+            if (pieces[kingSquare] == king || pieces[kingSquare] == null) pieces[kingSquare] = null;
+
+            NeonEffects.Shockwave(center, winner);
+            NeonEffects.SparkRain(winner, 1.2f);
+            yield return new WaitForSeconds(0.55f);
         }
 
         IEnumerator HintRoutine(Move move)
@@ -235,7 +323,7 @@ namespace KevChess.Game.View
         public void ReturnPiece(int square)
         {
             var piece = square >= 0 ? pieces[square] : null;
-            if (piece != null) piece.MoveTo(Square.File(square), Square.Rank(square));
+            if (piece != null) piece.MoveTo(Square.File(square), Square.Rank(square), null, Speed);
         }
 
         // ---------------------------------------------------------------- Pièces prises

@@ -8,7 +8,7 @@ namespace KevChess.Game.Visuals
     /// </summary>
     public static class NeonTextures
     {
-        static Texture2D _radial, _ring, _frame, _softSquare, _grid;
+        static Texture2D _radial, _ring, _frame, _softSquare, _softLine, _grid;
         static Cubemap _sky;
 
         /// <summary>Halo radial doux (blanc, alpha dégressif).</summary>
@@ -43,6 +43,13 @@ namespace KevChess.Game.Visuals
         {
             float e = Mathf.Max(Mathf.Abs(u - 0.5f), Mathf.Abs(v - 0.5f)) * 2f;
             return Mathf.Clamp01((1f - e) * 6f) * 0.55f + Mathf.Exp(-Sq((e - 0.9f) / 0.05f)) * 0.45f;
+        }));
+
+        /// <summary>Bande lumineuse : cœur net au milieu de v, halo doux, constante selon u (traînées, flèche).</summary>
+        public static Texture2D SoftLine => _softLine != null ? _softLine : (_softLine = Make("KevChess_SoftLine", 64, (u, v) =>
+        {
+            float d = Mathf.Abs(v - 0.5f) * 2f; // 0 au centre, 1 au bord
+            return Mathf.Clamp01(Mathf.Exp(-Sq(d / 0.22f)) + Mathf.Exp(-Sq(d / 0.6f)) * 0.4f) * Mathf.Clamp01((1f - d) * 8f);
         }));
 
         /// <summary>Grille fine répétable (une cellule par unité) pour le sol de l'abîme sous le plateau.</summary>

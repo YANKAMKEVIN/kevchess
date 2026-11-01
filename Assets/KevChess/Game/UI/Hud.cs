@@ -5,20 +5,27 @@ using KevChess.Core;
 using KevChess.Game.Audio;
 using KevChess.Game.CameraRig;
 using KevChess.Game.Match;
+using KevChess.Game.View;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace KevChess.Game.UI
 {
     /// <summary>
-    /// Interface complète construite par code : bandeau des joueurs, statut, coups, barre d'actions,
+    /// Interface complète construite par code : bandeau des joueurs (pendules), statut, coups, barre d'actions,
     /// menu principal, réglages IA, choix de promotion, fin de partie, confirmation.
+    /// Les autres écrans sont dans Hud.Screens.cs (réglages, puzzles, partie à deux, actions)
+    /// et Hud.Review.cs (revue et analyse).
     /// </summary>
-    public sealed class Hud : MonoBehaviour
+    public sealed partial class Hud : MonoBehaviour
     {
+        const float MateAnimationSeconds = 2.1f;
+        const float ClockAlertSeconds = 10f;
+
         MatchController match;
         OrbitCamera orbit;
         SoundBank sfx;
+        BoardView board;
         Action<Move> showHint;
 
         Canvas canvas;
@@ -26,14 +33,15 @@ namespace KevChess.Game.UI
         RectTransform safeRoot;
         Rect appliedSafeArea;
 
-        Text whiteName, blackName, whiteScore, blackScore, status, movesLine;
+        Text whiteName, blackName, whiteScore, blackScore, whiteClock, blackClock, status, movesLine, openingLine;
         Image whiteTurn, blackTurn;
-        Button undoButton, hintButton, viewButton, resignButton;
-        GameObject hudGroup;
+        Button undoButton, hintButton, viewButton, moreButton, listButton, nextButton;
+        GameObject hudGroup, bottomBar;
 
         GameObject menuOverlay, aiOverlay, promoOverlay, endOverlay, confirmOverlay;
-        Button continueButton, resumeButton, soundButton, hapticsButton;
+        Button continueButton, resumeButton;
         Text endTitle, endReason;
+        Button endAnalyzeButton;
         Action confirmAction;
         Text confirmText;
         Action<PieceType> promotionCallback;
@@ -41,21 +49,32 @@ namespace KevChess.Game.UI
         // Réglages en cours d'édition dans l'écran IA.
         int aiColorChoice; // 0 blancs, 1 noirs, 2 hasard
         AILevel aiLevel = AILevel.Medium;
-        Button[] colorButtons, levelButtons;
+        int aiClockChoice;
+        Button[] colorButtons, levelButtons, aiClockButtons;
+        Text aiStatsLabel;
 
         PieceColor localViewSide = PieceColor.White;
+        int lastTickSecond = -1;
+        string cachedOpening;
+        int cachedOpeningPly = -1;
+        ChessGame cachedOpeningGame;
 
         /// <summary>Bouton « Légendes » du menu : l'app bascule vers le mode fantastique.</summary>
         public event Action LegendsRequested;
 
         public bool IsBlockingOverlayOpen =>
-            menuOverlay.activeSelf || aiOverlay.activeSelf || promoOverlay.activeSelf || confirmOverlay.activeSelf || endOverlay.activeSelf;
+            menuOverlay.activeSelf || aiOverlay.activeSelf || promoOverlay.activeSelf || confirmOverlay.activeSelf || endOverlay.activeSelf ||
+            IsScreenOverlayOpen;
 
-        public void Build(MatchController matchController, OrbitCamera camera, SoundBank sounds, Action<Move> onHint)
+        /// <summary>Écran de fin de partie affiché (recette automatique).</summary>
+        public bool IsEndScreenOpen => endOverlay.activeSelf;
+
+        public void Build(MatchController matchController, OrbitCamera camera, SoundBank sounds, BoardView boardView, Action<Move> onHint)
         {
             match = matchController;
             orbit = camera;
             sfx = sounds;
+            board = boardView;
             showHint = onHint;
 
             canvas = gameObject.AddComponent<Canvas>();
@@ -70,8 +89,15 @@ namespace KevChess.Game.UI
             UIKit.Stretch(safeRoot);
 
             BuildHud();
+            BuildReviewBar();
+            BuildToast();
             BuildMenu();
             BuildAISetup();
+            BuildLocalSetup();
+            BuildSettings();
+            BuildPuzzleList();
+            BuildActions();
+            BuildAnalysis();
             BuildPromotion();
             BuildEndScreen();
             BuildConfirm();
@@ -79,6 +105,8 @@ namespace KevChess.Game.UI
             match.StateChanged += Refresh;
             match.GameEnded += OnGameEnded;
             match.NewMatchStarted += OnNewMatch;
+            match.MoveLanded += OnMoveLanded;
+            match.PuzzleFeedback += OnPuzzleFeedback;
             UpdateLayout();
             Refresh();
         }
@@ -94,33 +122,40 @@ namespace KevChess.Game.UI
             var top = UIKit.Rect("TopBar", hudGroup.transform);
             UIKit.Anchor(top, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -24), new Vector2(1040, 150));
             UIKit.HStack(top, 20);
-            BuildPlayerCard(top, PieceColor.White, out whiteName, out whiteScore, out whiteTurn);
-            BuildPlayerCard(top, PieceColor.Black, out blackName, out blackScore, out blackTurn);
+            BuildPlayerCard(top, PieceColor.White, out whiteName, out whiteScore, out whiteTurn, out whiteClock);
+            BuildPlayerCard(top, PieceColor.Black, out blackName, out blackScore, out blackTurn, out blackClock);
 
             status = UIKit.Label("Status", hudGroup.transform, "", 46, UIKit.Text, TextAnchor.MiddleCenter, FontStyle.Bold);
             UIKit.Anchor(status.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -190), new Vector2(1000, 64));
             status.gameObject.AddComponent<Shadow>().effectColor = new Color(0, 0, 0, 0.8f);
 
             movesLine = UIKit.Label("Moves", hudGroup.transform, "", 30, UIKit.TextDim);
-            UIKit.Anchor(movesLine.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -250), new Vector2(1000, 44));
+            UIKit.Anchor(movesLine.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -246), new Vector2(1000, 44));
             movesLine.horizontalOverflow = HorizontalWrapMode.Overflow;
 
-            // Barre d'actions.
+            // Nom de l'ouverture (ou titre du puzzle, note de revue), discret sous les coups.
+            openingLine = UIKit.Label("Opening", hudGroup.transform, "", 27, UIKit.TextDim * new Color(1, 1, 1, 0.85f), TextAnchor.MiddleCenter, FontStyle.Italic);
+            UIKit.Anchor(openingLine.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -284), new Vector2(1000, 36));
+            openingLine.horizontalOverflow = HorizontalWrapMode.Wrap;
+            openingLine.resizeTextForBestFit = true;
+            openingLine.resizeTextMinSize = 18;
+            openingLine.resizeTextMaxSize = 27;
+
+            // Barre d'actions : cinq boutons, en partie comme en puzzle.
             var bar = UIKit.Panel("BottomBar", hudGroup.transform, UIKit.Glass, true, UIKit.Cyan);
+            bottomBar = bar.gameObject;
             UIKit.Anchor(bar.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0, 28), new Vector2(1040, 140));
             UIKit.HStack(bar.rectTransform, 14, 16);
             UIKit.Button("Menu", bar.transform, "Menu", () => { sfx.Play(Sfx.Click); ShowMenu(true); }, null, 34);
             undoButton = UIKit.Button("Undo", bar.transform, "Annuler", () => { sfx.Play(Sfx.Click); match.UndoForHuman(); }, null, 34);
-            hintButton = UIKit.Button("Hint", bar.transform, "Indice", () => { sfx.Play(Sfx.Click); match.RequestHint(showHint); }, null, 34);
+            listButton = UIKit.Button("List", bar.transform, "Liste", () => { sfx.Play(Sfx.Click); OpenPuzzleList(); }, null, 34);
+            hintButton = UIKit.Button("Hint", bar.transform, "Indice", OnHintPressed, null, 34);
             viewButton = UIKit.Button("View", bar.transform, "Vue", OnViewPressed, null, 34);
-            resignButton = UIKit.Button("Resign", bar.transform, "Abandon", () =>
-            {
-                sfx.Play(Sfx.Click);
-                Confirm("Abandonner la partie ?", () => match.Resign());
-            }, UIKit.Magenta, 34);
+            moreButton = UIKit.Button("More", bar.transform, "Plus…", () => { sfx.Play(Sfx.Click); OpenActions(); }, UIKit.Magenta, 34);
+            nextButton = UIKit.Button("Next", bar.transform, "Suivant", () => { sfx.Play(Sfx.Click); NextPuzzle(); }, UIKit.Magenta, 34);
         }
 
-        void BuildPlayerCard(RectTransform parent, PieceColor color, out Text name, out Text score, out Image turn)
+        void BuildPlayerCard(RectTransform parent, PieceColor color, out Text name, out Text score, out Image turn, out Text clock)
         {
             var accent = color == PieceColor.White ? UIKit.Cyan : UIKit.Magenta;
             var card = UIKit.Panel(color + "Card", parent, UIKit.Glass, true, accent);
@@ -136,9 +171,18 @@ namespace KevChess.Game.UI
             UIKit.Anchor(dot.rectTransform, new Vector2(0f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(46, 0), new Vector2(56, 56));
 
             name = UIKit.Label("Name", card.transform, color == PieceColor.White ? "Blancs" : "Noirs", 38, UIKit.Text, TextAnchor.MiddleLeft, FontStyle.Bold);
-            UIKit.Stretch(name.rectTransform, 92, 50, 20, 14);
+            // Hauteur limitée : le nom reste sur une ligne (police réduite) plutôt que de passer à la ligne.
+            UIKit.Stretch(name.rectTransform, 92, 66, 20, 14);
+            name.resizeTextForBestFit = true;
+            name.resizeTextMinSize = 22;
+            name.resizeTextMaxSize = 38;
             score = UIKit.Label("Score", card.transform, "", 30, accent, TextAnchor.MiddleLeft);
             UIKit.Stretch(score.rectTransform, 92, 12, 20, 70);
+
+            // Temps restant, à droite de la carte (masqué sans limite).
+            clock = UIKit.Label("Clock", card.transform, "", 50, UIKit.Text, TextAnchor.MiddleRight, FontStyle.Bold);
+            UIKit.Anchor(clock.rectTransform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-22, 0), new Vector2(190, 90));
+            clock.horizontalOverflow = HorizontalWrapMode.Overflow;
         }
 
         void OnViewPressed()
@@ -152,6 +196,19 @@ namespace KevChess.Game.UI
             else orbit.ResetView(match.ViewSide);
         }
 
+        void OnHintPressed()
+        {
+            sfx.Play(Sfx.Click);
+            if (match.IsPuzzle)
+            {
+                if (!match.CanHumanAct) return;
+                var expected = match.Puzzle.ExpectedMove;
+                if (!expected.IsNull) showHint(expected);
+                return;
+            }
+            match.RequestHint(showHint);
+        }
+
         /// <summary>Vue par défaut (double-tap) : camp du joueur, ou camp au trait en local.</summary>
         public void ResetCamera()
         {
@@ -160,16 +217,25 @@ namespace KevChess.Game.UI
             orbit.ResetView(match.Settings.Mode == MatchMode.LocalTwoPlayers ? localViewSide : match.ViewSide);
         }
 
+        void OnMoveLanded(MoveVisual v)
+        {
+            // Partie à deux : la caméra passe du côté du camp au trait.
+            if (match.Settings.Mode != MatchMode.LocalTwoPlayers || !GamePrefs.AutoFlip || match.Game.IsOver) return;
+            localViewSide = match.Game.SideToMove;
+            orbit.ResetView(localViewSide);
+        }
+
         void Refresh()
         {
             var game = match.Game;
             if (game == null) return;
             var s = match.Settings;
+            bool puzzle = match.IsPuzzle;
 
             whiteName.text = PlayerName(PieceColor.White, s);
             blackName.text = PlayerName(PieceColor.Black, s);
 
-            int balance = MaterialBalance(game.Position);
+            int balance = MaterialBalance(reviewing && reviewGame != null ? reviewGame.Position : game.Position);
             whiteScore.text = balance > 0 ? "+" + balance : "";
             blackScore.text = balance < 0 ? "+" + (-balance) : "";
 
@@ -178,9 +244,46 @@ namespace KevChess.Game.UI
             whiteTurn.enabled = whiteToMove;
             blackTurn.enabled = blackToMove;
 
+            bool timed = !match.Clock.IsUnlimited;
+            whiteClock.gameObject.SetActive(timed);
+            blackClock.gameObject.SetActive(timed);
+            float nameRight = timed ? 205 : 20;
+            whiteName.rectTransform.offsetMax = new Vector2(-nameRight, -14);
+            blackName.rectTransform.offsetMax = new Vector2(-nameRight, -14);
+            whiteName.alignment = blackName.alignment = timed ? TextAnchor.UpperLeft : TextAnchor.MiddleLeft;
+            UpdateClocks();
+
+            // Barre d'actions : en puzzle, Liste et Suivant remplacent Annuler et Plus.
+            undoButton.gameObject.SetActive(!puzzle);
+            moreButton.gameObject.SetActive(!puzzle);
+            listButton.gameObject.SetActive(puzzle);
+            nextButton.gameObject.SetActive(puzzle);
+            bottomBar.SetActive(!reviewing);
+            undoButton.interactable = game.Moves.Count > 0 && !match.IsAnimating;
+            hintButton.interactable = match.CanHumanAct;
+            moreButton.interactable = !match.IsAnimating;
+            nextButton.interactable = !match.IsAnimating;
+            Highlight(nextButton, puzzle && match.Puzzle.IsSolved, UIKit.Magenta);
+
+            if (reviewing)
+            {
+                RefreshReview();
+                return;
+            }
+
             status.color = UIKit.Text;
-            if (game.IsOver) status.text = ResultTitle(game, s);
-            else if (match.IsAIThinking) status.text = "L'IA réfléchit…";
+            if (puzzle)
+            {
+                var session = match.Puzzle;
+                if (session.IsSolved)
+                {
+                    status.text = "Résolu !";
+                    status.color = UIKit.Cyan;
+                }
+                else status.text = "Mat en " + session.Puzzle.MateIn + " · " + (session.PlayerColor == PieceColor.White ? "les Blancs jouent" : "les Noirs jouent");
+            }
+            else if (game.IsOver) status.text = ResultTitle(game, s);
+            else if (match.IsAIThinking) status.text = ThinkingText();
             else if (game.InCheck)
             {
                 status.text = "Échec !";
@@ -189,17 +292,70 @@ namespace KevChess.Game.UI
             else if (s.Mode == MatchMode.VersusAI) status.text = s.IsHuman(game.SideToMove) ? "À vous de jouer" : "";
             else status.text = game.SideToMove == PieceColor.White ? "Aux Blancs de jouer" : "Aux Noirs de jouer";
 
-            movesLine.text = RecentMoves(game, 8);
-
-            undoButton.interactable = game.Moves.Count > 0 && !match.IsAnimating;
-            hintButton.interactable = match.CanHumanAct;
-            resignButton.interactable = !game.IsOver && !match.IsAnimating;
+            movesLine.text = RecentMoves(game, game.Moves.Count, 8);
+            openingLine.text = puzzle ? PuzzleCaption(match.Puzzle.Puzzle) : Opening(game);
         }
 
-        static string PlayerName(PieceColor color, MatchSettings s)
+        string Opening(ChessGame game)
+        {
+            // Recherche refaite seulement quand la partie change.
+            if (game != cachedOpeningGame || game.Moves.Count != cachedOpeningPly)
+            {
+                cachedOpeningGame = game;
+                cachedOpeningPly = game.Moves.Count;
+                cachedOpening = OpeningNames.Lookup(game.Moves, game.StartFen) ?? "";
+            }
+            return cachedOpening;
+        }
+
+        static string ThinkingText()
+        {
+            // Points animés ; les points invisibles gardent le texte immobile.
+            int dots = (int)(Time.unscaledTime / 0.35f) % 4;
+            return "L'IA réfléchit" + new string('.', dots) + "<color=#00000000>" + new string('.', 3 - dots) + "</color>";
+        }
+
+        void UpdateClocks()
+        {
+            var clock = match.Clock;
+            if (clock == null || clock.IsUnlimited || match.Game == null) return;
+            SetClock(whiteClock, clock, PieceColor.White);
+            SetClock(blackClock, clock, PieceColor.Black);
+        }
+
+        void SetClock(Text label, ChessClock clock, PieceColor color)
+        {
+            double t = Math.Max(0, clock.Remaining(color));
+            label.text = FormatClock(t);
+            bool active = clock.Turn == color && !match.Game.IsOver;
+            if (t < ClockAlertSeconds)
+            {
+                // Alerte : rouge, qui pulse quand la pendule tourne.
+                float pulse = clock.Running == color ? 0.65f + 0.35f * Mathf.Abs(Mathf.Sin(Time.unscaledTime * 4f)) : 1f;
+                label.color = UIKit.Danger * new Color(1, 1, 1, pulse);
+            }
+            else label.color = active ? UIKit.Text : UIKit.TextDim;
+        }
+
+        public static string FormatClock(double seconds)
+        {
+            if (seconds < ClockAlertSeconds)
+            {
+                int tenths = (int)(seconds * 10.0);
+                return tenths / 10 + "," + tenths % 10; // dixièmes, virgule à la française
+            }
+            int s = (int)Math.Ceiling(seconds);
+            return (s / 60) + ":" + (s % 60).ToString("00");
+        }
+
+        /// <summary>Nom du joueur, sans coupure de ligne (espaces insécables) : la police réduit plutôt.</summary>
+        static string PlayerName(PieceColor color, MatchSettings s) => PlayerNameText(color, s).Replace(' ', '\u00A0');
+
+        static string PlayerNameText(PieceColor color, MatchSettings s)
         {
             string side = color == PieceColor.White ? "Blancs" : "Noirs";
             if (s.Mode == MatchMode.LocalTwoPlayers) return side;
+            if (s.Mode == MatchMode.Puzzle) return s.HumanColor == color ? "Vous · " + side : side;
             return s.HumanColor == color ? "Vous · " + side : "IA " + MatchSettings.LevelName(s.Level);
         }
 
@@ -224,24 +380,38 @@ namespace KevChess.Game.UI
             return total;
         }
 
-        static string RecentMoves(ChessGame game, int maxPlies)
+        /// <summary>Derniers coups jusqu'au demi-coup <paramref name="upTo"/> (exclu), dans la notation choisie.</summary>
+        static string RecentMoves(ChessGame game, int upTo, int maxPlies)
         {
             var san = game.SanMoves;
-            if (san.Count == 0) return "";
-            var start = Position.FromFen(game.StartFen);
-            bool blackFirst = start.SideToMove == PieceColor.Black;
-            int first = Mathf.Max(0, san.Count - maxPlies);
+            upTo = Mathf.Min(upTo, san.Count);
+            if (upTo == 0) return "";
+            int first = Mathf.Max(0, upTo - maxPlies);
             var sb = new StringBuilder();
-            for (int i = first; i < san.Count; i++)
+            for (int i = first; i < upTo; i++)
             {
-                int plyIndex = i + (blackFirst ? 1 : 0);
-                int number = start.FullmoveNumber + plyIndex / 2;
-                bool whiteMove = plyIndex % 2 == 0;
+                MoveNumber(game.StartFen, i, out int number, out bool whiteMove);
                 if (whiteMove) sb.Append(number).Append(". ");
                 else if (i == first) sb.Append(number).Append("… ");
-                sb.Append(san[i]).Append("  ");
+                sb.Append(GamePrefs.San(san[i])).Append("  ");
             }
             return sb.ToString().TrimEnd();
+        }
+
+        /// <summary>Numéro du coup et camp du demi-coup <paramref name="ply"/> (0 = premier coup joué).</summary>
+        static void MoveNumber(string startFen, int ply, out int number, out bool whiteMove)
+        {
+            var start = Position.FromFen(startFen);
+            int plyIndex = ply + (start.SideToMove == PieceColor.Black ? 1 : 0);
+            number = start.FullmoveNumber + plyIndex / 2;
+            whiteMove = plyIndex % 2 == 0;
+        }
+
+        /// <summary>« 12. Cf3 » ou « 12… Cf3 ».</summary>
+        static string MoveLabel(string startFen, int ply, string san)
+        {
+            MoveNumber(startFen, ply, out int number, out bool whiteMove);
+            return number + (whiteMove ? ". " : "… ") + GamePrefs.San(san);
         }
 
         // ---------------------------------------------------------------- Menus
@@ -254,17 +424,23 @@ namespace KevChess.Game.UI
             dim.color = new Color(0.01f, 0.01f, 0.04f, 0.62f);
             root.gameObject.AddComponent<CanvasGroup>();
 
-            var panel = UIKit.Panel("Card", root, UIKit.GlassStrong, true, accent);
+            // Carte presque opaque : le bandeau du jeu ne transparaît pas derrière.
+            var panel = UIKit.Panel("Card", root, new Color(0.03f, 0.03f, 0.07f, 0.97f), true, accent);
             UIKit.Anchor(panel.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(width, height));
             card = panel.rectTransform;
             root.gameObject.SetActive(false);
             return root.gameObject;
         }
 
+        /// <summary>Carte dont la hauteur suit son contenu (boutons masqués selon le contexte).</summary>
+        static void FitHeight(RectTransform card) =>
+            card.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
         void BuildMenu()
         {
-            menuOverlay = Overlay("Menu", out var card, 900, 1480, UIKit.Cyan);
-            UIKit.VStack(card, 26, 56);
+            menuOverlay = Overlay("Menu", out var card, 900, 1340, UIKit.Cyan);
+            UIKit.VStack(card, 24, 56);
+            FitHeight(card);
 
             var title = UIKit.Label("Title", card, "KEVCHESS", 110, UIKit.Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
             UIKit.Size(title, 150);
@@ -275,45 +451,28 @@ namespace KevChess.Game.UI
             UIKit.Size(sub, 60);
 
             continueButton = UIKit.Button("Continue", card, "Continuer", () => { sfx.Play(Sfx.Click); ShowMenu(false); });
-            UIKit.Size(continueButton, 120);
+            UIKit.Size(continueButton, 116);
             resumeButton = UIKit.Button("Resume", card, "Reprendre la partie", () =>
             {
                 sfx.Play(Sfx.Click);
                 if (match.ResumeSaved()) ShowMenu(false);
             });
-            UIKit.Size(resumeButton, 120);
-            var local = UIKit.Button("Local", card, "Partie à deux", () =>
-            {
-                sfx.Play(Sfx.Click);
-                match.StartNew(new MatchSettings { Mode = MatchMode.LocalTwoPlayers });
-                ShowMenu(false);
-            });
-            UIKit.Size(local, 120);
-            var vsAI = UIKit.Button("VsAI", card, "Contre l'IA", () => { sfx.Play(Sfx.Click); Show(menuOverlay, false); Show(aiOverlay, true); }, UIKit.Magenta);
-            UIKit.Size(vsAI, 120);
+            UIKit.Size(resumeButton, 116);
+            var local = UIKit.Button("Local", card, "Partie à deux", () => { sfx.Play(Sfx.Click); OpenLocalSetup(); });
+            UIKit.Size(local, 116);
+            var vsAI = UIKit.Button("VsAI", card, "Contre l'IA", () => { sfx.Play(Sfx.Click); OpenAISetup(); }, UIKit.Magenta);
+            UIKit.Size(vsAI, 116);
             var legends = UIKit.Button("Legends", card, "Légendes", () =>
             {
                 sfx.Play(Sfx.Click);
                 Show(menuOverlay, false);
                 LegendsRequested?.Invoke();
             }, new Color(1f, 0.82f, 0.35f));
-            UIKit.Size(legends, 120);
-            soundButton = UIKit.Button("Sound", card, "", () =>
-            {
-                sfx.Muted = !sfx.Muted;
-                sfx.Play(Sfx.Click);
-                UpdateSoundLabel();
-            });
-            UIKit.Size(soundButton, 100);
-            hapticsButton = UIKit.Button("Haptics", card, "", () =>
-            {
-                Haptics.Enabled = !Haptics.Enabled;
-                sfx.Play(Sfx.Click);
-                Haptics.Select();
-                UpdateSoundLabel();
-            });
-            UIKit.Size(hapticsButton, 100);
-            UpdateSoundLabel();
+            UIKit.Size(legends, 116);
+            var puzzles = UIKit.Button("Puzzles", card, "Puzzles", () => { sfx.Play(Sfx.Click); OpenPuzzleList(); }, UIKit.Magenta);
+            UIKit.Size(puzzles, 116);
+            var settings = UIKit.Button("Settings", card, "Réglages", () => { sfx.Play(Sfx.Click); OpenSettings(); }, UIKit.TextDim);
+            UIKit.Size(settings, 100);
 
             if (Application.platform != RuntimePlatform.Android && Application.platform != RuntimePlatform.IPhonePlayer)
             {
@@ -322,23 +481,18 @@ namespace KevChess.Game.UI
             }
         }
 
-        void UpdateSoundLabel()
-        {
-            UIKit.SetButtonText(soundButton, sfx.Muted ? "Son : coupé" : "Son : activé");
-            UIKit.SetButtonText(hapticsButton, Haptics.Enabled ? "Vibrations : activées" : "Vibrations : coupées");
-        }
-
         void BuildAISetup()
         {
             aiOverlay = Overlay("AISetup", out var card, 940, 1300, UIKit.Magenta);
-            UIKit.VStack(card, 24, 56);
+            UIKit.VStack(card, 16, 48);
+            FitHeight(card);
 
-            UIKit.Size(UIKit.Label("Title", card, "Contre l'IA", 72, UIKit.Magenta, TextAnchor.MiddleCenter, FontStyle.Bold), 110);
-            UIKit.Size(UIKit.Label("ColorLabel", card, "Votre couleur", 36, UIKit.TextDim), 56);
+            UIKit.Size(UIKit.Label("Title", card, "Contre l'IA", 72, UIKit.Magenta, TextAnchor.MiddleCenter, FontStyle.Bold), 100);
+            UIKit.Size(UIKit.Label("ColorLabel", card, "Votre couleur", 34, UIKit.TextDim), 48);
 
             var colors = UIKit.Rect("Colors", card);
             UIKit.HStack(colors, 16);
-            UIKit.Size(colors.gameObject.AddComponent<LayoutElement>(), 120);
+            UIKit.Size(colors.gameObject.AddComponent<LayoutElement>(), 104);
             string[] colorNames = { "Blancs", "Noirs", "Hasard" };
             colorButtons = new Button[3];
             for (int i = 0; i < 3; i++)
@@ -347,31 +501,75 @@ namespace KevChess.Game.UI
                 colorButtons[i] = UIKit.Button("Color" + i, colors, colorNames[i], () => { sfx.Play(Sfx.Click); aiColorChoice = idx; RefreshAISetup(); });
             }
 
-            UIKit.Size(UIKit.Label("LevelLabel", card, "Niveau", 36, UIKit.TextDim), 56);
+            UIKit.Size(UIKit.Label("LevelLabel", card, "Niveau", 34, UIKit.TextDim), 48);
             var levels = UIKit.Rect("Levels", card);
-            UIKit.VStack(levels, 12);
-            UIKit.Size(levels.gameObject.AddComponent<LayoutElement>(), 5 * 92 + 4 * 12);
+            UIKit.VStack(levels, 10);
+            UIKit.Size(levels.gameObject.AddComponent<LayoutElement>(), 5 * 84 + 4 * 10);
             levelButtons = new Button[5];
             for (int i = 0; i < 5; i++)
             {
                 var level = (AILevel)i;
                 levelButtons[i] = UIKit.Button("Level" + i, levels, MatchSettings.LevelName(level), () => { sfx.Play(Sfx.Click); aiLevel = level; RefreshAISetup(); }, null, 36);
-                UIKit.Size(levelButtons[i], 92);
+                UIKit.Size(levelButtons[i], 84);
             }
+            // Bilan contre le niveau choisi.
+            aiStatsLabel = UIKit.Label("Stats", card, "", 30, UIKit.Cyan);
+            UIKit.Size(aiStatsLabel, 44);
+
+            UIKit.Size(UIKit.Label("ClockLabel", card, "Cadence", 34, UIKit.TextDim), 48);
+            aiClockButtons = BuildClockChoices(card, i => { aiClockChoice = i; RefreshAISetup(); });
 
             var row = UIKit.Rect("Actions", card);
             UIKit.HStack(row, 16);
-            UIKit.Size(row.gameObject.AddComponent<LayoutElement>(), 120);
+            UIKit.Size(row.gameObject.AddComponent<LayoutElement>(), 116);
             UIKit.Button("Back", row, "Retour", () => { sfx.Play(Sfx.Click); Show(aiOverlay, false); ShowMenu(true); }, UIKit.TextDim);
             UIKit.Button("Play", row, "Jouer", StartAIMatch, UIKit.Magenta);
             RefreshAISetup();
+        }
+
+        /// <summary>Deux rangées de trois cadences (TimeControl.Presets).</summary>
+        Button[] BuildClockChoices(RectTransform card, Action<int> onPick)
+        {
+            var presets = TimeControl.Presets;
+            var buttons = new Button[presets.Length];
+            var grid = UIKit.Rect("Clocks", card);
+            UIKit.VStack(grid, 12);
+            UIKit.Size(grid.gameObject.AddComponent<LayoutElement>(), 2 * 86 + 12);
+            RectTransform row = null;
+            for (int i = 0; i < presets.Length; i++)
+            {
+                if (i % 3 == 0)
+                {
+                    row = UIKit.Rect("Row" + i / 3, grid);
+                    UIKit.HStack(row, 14);
+                    UIKit.Size(row.gameObject.AddComponent<LayoutElement>(), 86);
+                }
+                int idx = i;
+                buttons[i] = UIKit.Button("Clock" + i, row, presets[i].Label, () => { sfx.Play(Sfx.Click); onPick(idx); }, null, 34);
+            }
+            return buttons;
+        }
+
+        void OpenAISetup()
+        {
+            aiClockChoice = GamePrefs.ClockPreset(true);
+            RefreshAISetup();
+            Show(menuOverlay, false);
+            Show(aiOverlay, true);
         }
 
         void RefreshAISetup()
         {
             for (int i = 0; i < colorButtons.Length; i++) Highlight(colorButtons[i], i == aiColorChoice, UIKit.Cyan);
             for (int i = 0; i < levelButtons.Length; i++) Highlight(levelButtons[i], i == (int)aiLevel, UIKit.Magenta);
+            for (int i = 0; i < aiClockButtons.Length; i++) Highlight(aiClockButtons[i], i == aiClockChoice, UIKit.Cyan);
+            var r = GamePrefs.Stats(aiLevel);
+            aiStatsLabel.text = r.Wins + r.Draws + r.Losses == 0
+                ? "Aucune partie contre ce niveau"
+                : "Bilan : " + Plural(r.Wins, "victoire") + " · " + Plural(r.Draws, "nulle") + " · " + Plural(r.Losses, "défaite");
         }
+
+        static string Plural(int n, string word) => n + " " + word + (n > 1 ? "s" : "");
 
         static void Highlight(Button b, bool on, Color accent)
         {
@@ -385,7 +583,10 @@ namespace KevChess.Game.UI
             var color = aiColorChoice == 2
                 ? (UnityEngine.Random.value < 0.5f ? PieceColor.White : PieceColor.Black)
                 : (PieceColor)aiColorChoice;
-            match.StartNew(new MatchSettings { Mode = MatchMode.VersusAI, HumanColor = color, Level = aiLevel });
+            GamePrefs.SetClockPreset(true, aiClockChoice);
+            var settings = new MatchSettings { Mode = MatchMode.VersusAI, HumanColor = color, Level = aiLevel };
+            settings.Clock = TimeControl.Presets[aiClockChoice];
+            match.StartNew(settings);
             Show(aiOverlay, false);
             ShowMenu(false);
         }
@@ -396,8 +597,7 @@ namespace KevChess.Game.UI
             {
                 bool inGame = match.Game != null && !match.Game.IsOver;
                 continueButton.gameObject.SetActive(inGame);
-                resumeButton.gameObject.SetActive(!inGame && MatchController.HasSavedMatch());
-                UpdateSoundLabel();
+                resumeButton.gameObject.SetActive((!inGame || match.IsPuzzle) && MatchController.HasSavedMatch());
             }
             Show(menuOverlay, show);
         }
@@ -456,7 +656,8 @@ namespace KevChess.Game.UI
         void BuildEndScreen()
         {
             endOverlay = Overlay("GameOver", out var card, 900, 800, UIKit.Cyan);
-            UIKit.VStack(card, 22, 50);
+            UIKit.VStack(card, 20, 50);
+            FitHeight(card);
             endTitle = UIKit.Label("Title", card, "", 84, UIKit.Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
             UIKit.Size(endTitle, 120);
             endReason = UIKit.Label("Reason", card, "", 40, UIKit.TextDim);
@@ -466,12 +667,22 @@ namespace KevChess.Game.UI
                 sfx.Play(Sfx.Click);
                 var s = match.Settings;
                 // Contre l'IA, on change de couleur à chaque revanche.
-                var next = new MatchSettings { Mode = s.Mode, Level = s.Level, HumanColor = s.Mode == MatchMode.VersusAI ? Piece.Opposite(s.HumanColor) : s.HumanColor };
+                var next = new MatchSettings
+                {
+                    Mode = s.Mode, Level = s.Level, ClockBase = s.ClockBase, ClockIncrement = s.ClockIncrement,
+                    HumanColor = s.Mode == MatchMode.VersusAI ? Piece.Opposite(s.HumanColor) : s.HumanColor,
+                };
                 match.StartNew(next);
                 Show(endOverlay, false);
-            }), 120);
-            UIKit.Size(UIKit.Button("Review", card, "Voir le plateau", () => { sfx.Play(Sfx.Click); Show(endOverlay, false); }, UIKit.TextDim), 110);
-            UIKit.Size(UIKit.Button("ToMenu", card, "Menu", () => { sfx.Play(Sfx.Click); Show(endOverlay, false); ShowMenu(true); }, UIKit.Magenta), 110);
+            }), 116);
+            endAnalyzeButton = UIKit.Button("Analyze", card, "Analyser la partie", () => { sfx.Play(Sfx.Click); OpenAnalysis(); }, UIKit.Magenta);
+            UIKit.Size(endAnalyzeButton, 106);
+            var row = UIKit.Rect("Row", card);
+            UIKit.HStack(row, 16);
+            UIKit.Size(row.gameObject.AddComponent<LayoutElement>(), 106);
+            UIKit.Button("Review", row, "Revoir", () => { sfx.Play(Sfx.Click); EnterReview(match.Game.Moves.Count); }, UIKit.TextDim, 36);
+            UIKit.Button("Copy", row, "Copier PGN", () => { sfx.Play(Sfx.Click); CopyPgn(); }, UIKit.TextDim, 36);
+            UIKit.Size(UIKit.Button("ToMenu", card, "Menu", () => { sfx.Play(Sfx.Click); Show(endOverlay, false); ShowMenu(true); }, UIKit.TextDim), 100);
         }
 
         void OnGameEnded()
@@ -480,14 +691,36 @@ namespace KevChess.Game.UI
             var s = match.Settings;
             endTitle.text = ResultTitle(game, s);
             endReason.text = ReasonText(game.EndReason);
+            endAnalyzeButton.interactable = game.Moves.Count > 0;
 
             bool humanWon = s.Mode == MatchMode.VersusAI &&
                             ((game.Result == GameResult.WhiteWins && s.HumanColor == PieceColor.White) ||
                              (game.Result == GameResult.BlackWins && s.HumanColor == PieceColor.Black));
             bool humanLost = s.Mode == MatchMode.VersusAI && game.Result != GameResult.Draw && !humanWon;
+            if (s.Mode == MatchMode.VersusAI) GamePrefs.RecordResult(s.Level, humanWon ? 1 : humanLost ? -1 : 0);
             endTitle.color = humanLost ? UIKit.Magenta : UIKit.Cyan;
-            sfx.Play(game.Result == GameResult.Draw ? Sfx.Draw : humanLost ? Sfx.Defeat : Sfx.Victory);
-            StartCoroutine(ShowDelayed(endOverlay, 0.9f));
+            var resultSound = game.Result == GameResult.Draw ? Sfx.Draw : humanLost ? Sfx.Defeat : Sfx.Victory;
+
+            float delay = 0.9f;
+            if (game.EndReason == GameEndReason.Checkmate)
+            {
+                // Le roi maté se brise ; son et animation partent dans la même image.
+                board.StartCoroutine(board.PlayMateAnimation(game.Position.KingSquare(game.SideToMove)));
+                sfx.PlayMate();
+                delay = MateAnimationSeconds;
+            }
+            else if (game.EndReason == GameEndReason.Timeout || game.EndReason == GameEndReason.TimeoutInsufficientMaterial)
+                sfx.PlayTimeout();
+            StartCoroutine(ShowEndScreen(delay, resultSound));
+        }
+
+        IEnumerator ShowEndScreen(float delay, Sfx resultSound)
+        {
+            var game = match.Game;
+            yield return new WaitForSecondsRealtime(delay);
+            if (match.Game != game || !game.IsOver || reviewing) yield break;
+            sfx.Play(resultSound);
+            Show(endOverlay, true);
         }
 
         static string ResultTitle(ChessGame game, MatchSettings s)
@@ -509,17 +742,22 @@ namespace KevChess.Game.UI
                 case GameEndReason.InsufficientMaterial: return "Matériel insuffisant";
                 case GameEndReason.Resignation: return "Abandon";
                 case GameEndReason.DrawAgreement: return "Nulle par accord";
+                case GameEndReason.Timeout: return "Temps écoulé";
+                case GameEndReason.TimeoutInsufficientMaterial: return "Temps écoulé, mais matériel insuffisant pour mater";
                 default: return "";
             }
         }
 
         void OnNewMatch()
         {
+            if (reviewing) LeaveReviewState();
             localViewSide = match.Settings.Mode == MatchMode.LocalTwoPlayers ? match.Game.SideToMove : match.ViewSide;
             orbit.ResetView(localViewSide);
             Show(endOverlay, false);
             Show(promoOverlay, false);
             promotionCallback = null;
+            CancelAnalysis();
+            lastTickSecond = -1;
         }
 
         // ---------------------------------------------------------------- Confirmation
@@ -528,8 +766,9 @@ namespace KevChess.Game.UI
         {
             confirmOverlay = Overlay("Confirm", out var card, 860, 440, UIKit.Magenta);
             UIKit.VStack(card, 24, 50);
-            confirmText = UIKit.Label("Question", card, "", 46, UIKit.Text, TextAnchor.MiddleCenter, FontStyle.Bold);
-            UIKit.Size(confirmText, 130);
+            FitHeight(card);
+            confirmText = UIKit.Label("Question", card, "", 44, UIKit.Text, TextAnchor.MiddleCenter, FontStyle.Bold);
+            UIKit.Size(confirmText, 150);
             var row = UIKit.Rect("Buttons", card);
             UIKit.HStack(row, 20);
             UIKit.Size(row.gameObject.AddComponent<LayoutElement>(), 120);
@@ -538,7 +777,9 @@ namespace KevChess.Game.UI
             {
                 sfx.Play(Sfx.Click);
                 Show(confirmOverlay, false);
-                confirmAction?.Invoke();
+                var action = confirmAction;
+                confirmAction = null;
+                action?.Invoke();
             }, UIKit.Magenta);
         }
 
@@ -560,12 +801,6 @@ namespace KevChess.Game.UI
             StartCoroutine(FadeIn(overlay));
         }
 
-        IEnumerator ShowDelayed(GameObject overlay, float delay)
-        {
-            yield return new WaitForSecondsRealtime(delay);
-            if (match.Game != null && match.Game.IsOver) Show(overlay, true);
-        }
-
         static IEnumerator FadeIn(GameObject overlay)
         {
             var group = overlay.GetComponent<CanvasGroup>();
@@ -584,17 +819,45 @@ namespace KevChess.Game.UI
         void Update()
         {
             UpdateLayout();
-            // L'IA ne joue pas derrière le menu ou l'écran de réglages.
-            if (match != null) match.Paused = menuOverlay.activeSelf || aiOverlay.activeSelf;
+            if (match == null) return;
+            // L'IA et la pendule attendent tant qu'un écran est ouvert (la promotion fait partie du coup).
+            match.Paused = menuOverlay.activeSelf || aiOverlay.activeSelf || confirmOverlay.activeSelf || endOverlay.activeSelf ||
+                           IsScreenOverlayOpen || reviewing || drawPending;
+
+            if (match.Game == null) return;
+            UpdateClocks();
+            UpdateClockTick();
+            if (!reviewing && match.IsAIThinking && !match.Game.IsOver) status.text = ThinkingText();
+            UpdateToast();
+        }
+
+        /// <summary>Tic chaque seconde sous 10 s, pour la pendule d'un joueur humain qui tourne.</summary>
+        void UpdateClockTick()
+        {
+            var clock = match.Clock;
+            var running = clock.Running;
+            if (clock.IsUnlimited || running == null || match.Game.IsOver || !match.Settings.IsHuman(running.Value))
+            {
+                lastTickSecond = -1;
+                return;
+            }
+            double t = clock.Remaining(running.Value);
+            if (t >= ClockAlertSeconds || t <= 0) { lastTickSecond = -1; return; }
+            int second = (int)Math.Ceiling(t);
+            if (second == lastTickSecond) return;
+            lastTickSecond = second;
+            sfx.PlayClockTick();
         }
 
         /// <summary>Bouton retour Android / Échap : ferme l'écran du dessus, sinon ouvre le menu.</summary>
         public void HandleBack()
         {
             if (promoOverlay.activeSelf) { CancelPromotion(); return; }
-            if (confirmOverlay.activeSelf) { Show(confirmOverlay, false); return; }
+            if (confirmOverlay.activeSelf) { Show(confirmOverlay, false); confirmAction = null; return; }
+            if (HandleBackScreens()) return;
             if (aiOverlay.activeSelf) { Show(aiOverlay, false); ShowMenu(true); return; }
             if (endOverlay.activeSelf) { Show(endOverlay, false); return; }
+            if (reviewing) { ExitReview(); return; }
             if (menuOverlay.activeSelf)
             {
                 if (match.Game != null && !match.Game.IsOver) ShowMenu(false);

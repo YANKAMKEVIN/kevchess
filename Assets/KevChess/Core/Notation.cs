@@ -67,6 +67,28 @@ namespace KevChess.Core
             return Move.Null;
         }
 
+        /// <summary>
+        /// SAN affichable : en français, les lettres des pièces deviennent R D T F C (Roi, Dame, Tour, Fou, Cavalier),
+        /// promotions comprises (e8=Q → e8=D). Les colonnes (minuscules) et le roque ne changent pas.
+        /// </summary>
+        public static string Localize(string san, bool french)
+        {
+            if (!french || string.IsNullOrEmpty(san)) return san;
+            var chars = san.ToCharArray();
+            for (int i = 0; i < chars.Length; i++)
+            {
+                switch (chars[i])
+                {
+                    case 'K': chars[i] = 'R'; break;
+                    case 'Q': chars[i] = 'D'; break;
+                    case 'R': chars[i] = 'T'; break;
+                    case 'B': chars[i] = 'F'; break;
+                    case 'N': chars[i] = 'C'; break;
+                }
+            }
+            return new string(chars);
+        }
+
         static string Normalize(string san) =>
             san.Trim().Replace("0-0-0", "O-O-O").Replace("0-0", "O-O").TrimEnd('+', '#', '!', '?');
     }

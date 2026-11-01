@@ -208,6 +208,59 @@ namespace KevChess.AI
         }
 
         // ---------------------------------------------------------------
+        // Proposition de nulle
+        // ---------------------------------------------------------------
+
+        /// <summary>Aucune nulle acceptée avant ce demi-coup.</summary>
+        public const int DrawMinPly = 20;
+        /// <summary>Matériel total (pions compris, rois exclus) en dessous duquel une position égale est jugée « simplifiée ».</summary>
+        public const int DrawLowMaterial = 2000;
+
+        /// <summary>
+        /// Réponse de l'IA à une proposition de nulle, calculée hors du thread de rendu (moteur d'indice, ~400 ms).
+        /// Accepte si son évaluation est ≤ −50 cp, ou entre −50 et +50 avec peu de matériel ; refuse avant le 20e demi-coup.
+        /// Lève OperationCanceledException si ct est annulé.
+        /// </summary>
+        public Task<bool> AcceptsDrawAsync(ChessGame game, PieceColor aiSide, CancellationToken ct = default)
+        {
+            if (game == null) throw new ArgumentNullException(nameof(game));
+            if (game.IsOver) return Task.FromResult(false);
+            int ply = Math.Max(game.Moves.Count,
+                (game.Position.FullmoveNumber - 1) * 2 + (game.SideToMove == PieceColor.Black ? 1 : 0));
+            if (ply < DrawMinPly) return Task.FromResult(false);
+            var copy = game.Position.Clone();
+            return Task.Run(() =>
+            {
+                var limits = new SearchLimits { MaxTimeMs = 400, MaxDepth = 12, CancellationToken = ct };
+                SearchResult r;
+                lock (hintGate) r = hint.Search(copy, limits);
+                ct.ThrowIfCancellationRequested();
+                int eval = copy.SideToMove == aiSide ? r.Score : -r.Score;
+                return DecideDraw(eval, Material(copy), ply);
+            }, ct);
+        }
+
+        /// <summary>Règle de décision (évaluation du point de vue de l'IA, matériel total, demi-coups joués).</summary>
+        public static bool DecideDraw(int evalForAiCp, int totalMaterialCp, int ply)
+        {
+            if (ply < DrawMinPly) return false;
+            if (evalForAiCp <= -50) return true;
+            return evalForAiCp < 50 && totalMaterialCp <= DrawLowMaterial;
+        }
+
+        /// <summary>Matériel total des deux camps (valeurs simples, rois exclus).</summary>
+        public static int Material(Position pos)
+        {
+            int total = 0;
+            for (int sq = 0; sq < 64; sq++)
+            {
+                var t = Piece.TypeOf(pos[sq]);
+                if (t != PieceType.None && t != PieceType.King) total += Evaluator.SimpleValue[(int)t];
+            }
+            return total;
+        }
+
+        // ---------------------------------------------------------------
         // Imprécision « humaine »
         // ---------------------------------------------------------------
 
