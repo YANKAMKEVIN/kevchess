@@ -2,6 +2,7 @@ using KevChess.Core;
 using KevChess.Game.Audio;
 using KevChess.Game.CameraRig;
 using KevChess.Game.Input;
+using KevChess.Game.Legends;
 using KevChess.Game.Match;
 using KevChess.Game.UI;
 using KevChess.Game.View;
@@ -27,6 +28,7 @@ namespace KevChess.Game.App
         SoundBank sfx;
         PointerInput pointer;
         BoardInteraction interaction;
+        LegendsMode legends;
         bool lastTapHitBoard;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -63,16 +65,31 @@ namespace KevChess.Game.App
 
             interaction = new BoardInteraction(match, board, hud, sfx, mainCamera);
 
+            // Mode Légendes : construit à côté, il reçoit les touchers quand il est actif.
+            var legendsGo = new GameObject("Legends");
+            legendsGo.transform.SetParent(transform, false);
+            legends = legendsGo.AddComponent<LegendsMode>();
+            legends.Init(mainCamera, orbit, sfx, ExitLegends);
+            hud.LegendsRequested += EnterLegends;
+
             pointer = gameObject.AddComponent<PointerInput>();
-            pointer.Tapped += p => lastTapHitBoard = interaction.OnTap(p);
-            pointer.PieceGestureFilter = interaction.CanStartDrag;
-            pointer.PieceDragged += interaction.OnDrag;
-            pointer.PieceDropped += interaction.OnDrop;
-            pointer.PieceDragCancelled += interaction.OnDragCancelled;
-            pointer.Dragged += d => { if (!hud.IsBlockingOverlayOpen) orbit.Orbit(d); };
-            pointer.Zoomed += f => { if (!hud.IsBlockingOverlayOpen) orbit.Zoom(f); };
+            pointer.Tapped += p =>
+            {
+                if (legends.Active) legends.OnTap(p);
+                else lastTapHitBoard = interaction.OnTap(p);
+            };
+            pointer.PieceGestureFilter = p => legends.Active ? legends.CanStartDrag(p) : interaction.CanStartDrag(p);
+            pointer.PieceDragged += p => { if (legends.Active) legends.OnDrag(p); else interaction.OnDrag(p); };
+            pointer.PieceDropped += p => { if (legends.Active) legends.OnDrop(p); else interaction.OnDrop(p); };
+            pointer.PieceDragCancelled += () => { if (legends.Active) legends.OnDragCancelled(); else interaction.OnDragCancelled(); };
+            pointer.Dragged += d => { if (!CameraBlocked) orbit.Orbit(d); };
+            pointer.Zoomed += f => { if (!CameraBlocked) orbit.Zoom(f); };
             // Double-tap hors plateau : recentrer (sur le plateau, les touchers servent à jouer).
-            pointer.DoubleTapped += _ => { if (!hud.IsBlockingOverlayOpen && !lastTapHitBoard) hud.ResetCamera(); };
+            pointer.DoubleTapped += _ =>
+            {
+                if (legends.Active) legends.OnDoubleTap();
+                else if (!hud.IsBlockingOverlayOpen && !lastTapHitBoard) hud.ResetCamera();
+            };
 
             match.MoveStarted += OnMoveStarted;
             match.MoveLanded += OnMoveLanded;
@@ -87,6 +104,26 @@ namespace KevChess.Game.App
 
             if (AIBench.Requested()) AIBench.Run();
             if (AutoTest.Requested(out var folder)) gameObject.AddComponent<AutoTest>().Run(match, hud, folder);
+            if (LegendsAutoTest.Requested(out var legendsFolder)) gameObject.AddComponent<LegendsAutoTest>().Run(legends, EnterLegends, legendsFolder);
+        }
+
+        bool CameraBlocked => legends.Active ? legends.BlocksCamera : hud.IsBlockingOverlayOpen;
+
+        void EnterLegends()
+        {
+            match.Paused = true;
+            interaction.ClearSelection();
+            board.gameObject.SetActive(false);
+            hud.gameObject.SetActive(false);
+            legends.Enter();
+        }
+
+        void ExitLegends()
+        {
+            board.gameObject.SetActive(true);
+            hud.gameObject.SetActive(true);
+            orbit.SnapToView(match.Settings.Mode == MatchMode.LocalTwoPlayers ? match.Game.SideToMove : match.ViewSide);
+            hud.ShowMenu(true);
         }
 
         /// <summary>Lancé depuis une autre scène (Main Camera, Directional Light…) : on coupe ce qui doublonnerait.</summary>
@@ -144,7 +181,11 @@ namespace KevChess.Game.App
         {
             // Bouton retour Android / Échap : ouvre ou ferme le menu.
             var kb = Keyboard.current;
-            if (kb != null && kb.escapeKey.wasPressedThisFrame) hud.HandleBack();
+            if (kb != null && kb.escapeKey.wasPressedThisFrame)
+            {
+                if (legends.Active) legends.HandleBack();
+                else hud.HandleBack();
+            }
         }
 
         void ShowHint(Move move)

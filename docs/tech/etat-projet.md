@@ -33,6 +33,10 @@ Assets/KevChess/
     UI/      Hud (uGUI construit par code : bandeau joueurs, statut, coups, menu, IA, promotion, fin de partie)
     Audio/   SoundBank (sons de verre/cristal synthétisés), Haptics (vibrations Android, désactivables)
     App/     KevChessApp : point d'entrée, se crée seul au chargement de la scène
+    Legends/ mode Légendes : LegendsMode (bascule), LegendsController, LegendsBoardView (personnages, duels, DuelCamera), LivingBoard, LegendsHud, LegendsInteraction
+  Core/Fantasy/  règles du mode Légendes (FantasyPosition, FantasyAction, FantasyMoveGenerator, EventPlanner, FantasyGame)
+  AI/Fantasy/    IA du mode Légendes (FantasyEvaluator, FantasySearcher, FantasyAI)
+  Game/Visuals/Fantasy/  personnages procéduraux (CharacterRig, FantasyPieceFactory, FantasyPieceView, FantasyFx)
   Editor/    BuildScript (configuration + builds Android/macOS en ligne de commande)
 tests/KevChess.Tests/  tests NUnit hors Unity (Core + AI)
 ```
@@ -45,7 +49,7 @@ tests/KevChess.Tests/  tests NUnit hors Unity (Core + AI)
 cd ~/dev/kevchess/tests/KevChess.Tests && DOTNET_CLI_TELEMETRY_OPTOUT=1 /Applications/Unity/Hub/Editor/6000.6.3f1/Unity.app/Contents/Resources/Scripting/DotNetSdk/dotnet test
 ```
 
-97 tests verts (≈ 6 s) : perft sur 6 positions de référence (jusqu'à profondeur 5), roque, en passant, promotion, clouage, mat, pat, 50 coups, triple répétition, matériel insuffisant, SAN, PGN, hachage incrémental ; IA : mats en 1/2, pas de dame en prise, pat évité, coups légaux, limite de temps, annulation, symétrie de l'évaluation, Maître bat Débutant.
+139 tests verts (≈ 12 s), dont 42 pour le mode Légendes (règles, équivalence perft avec le classique sans énergie, plateau vivant, sauvegarde, IA). Classique : perft sur 6 positions de référence (jusqu'à profondeur 5), roque, en passant, promotion, clouage, mat, pat, 50 coups, triple répétition, matériel insuffisant, SAN, PGN, hachage incrémental ; IA : mats en 1/2, pas de dame en prise, pat évité, coups légaux, limite de temps, annulation, symétrie de l'évaluation, Maître bat Débutant.
 
 Perf IA (Mac, .NET) : ~1,1–1,5 M nœuds/s, profondeur 10 en < 1 s depuis la position initiale.
 
@@ -105,5 +109,5 @@ Pièges rencontrés :
 - [ ] Module iOS + build Xcode
 - [ ] V1.1 : Stockfish via `IChessEngine` (AIAdapter est le seul point à changer)
 - [x] Glisser-déposer, pièces prises en 3D, vibrations
-- [ ] Mode fantastique (« Légendes » à l'écran) : conception validée et questions tranchées dans `docs/design/mode-fantastique.md` (branche `design/mode-fantastique`), prochaine étape = 1 (règles de base dans `Core/Fantasy`)
+- [ ] Mode Légendes (`docs/design/mode-fantastique.md`, branche `feature/legendes`) : règles, plateau vivant, IA, personnages procéduraux, duels de capture, plateau vivant visuel et interface faits ; bouton « Légendes » dans le menu. Recette : `-kevchess-legends-autotest <dossier>`. Reste : recette Android (S24), équilibrage par auto-parties IA contre IA, retouches visuelles (chevalier, sentinelle, reflets des personnages). IA : profondeur 9 en 0,5 s au départ (classique 10), 6 en milieu de partie avec pouvoirs
 - [ ] Idées : horloge, thèmes, analyse de partie, export PGN

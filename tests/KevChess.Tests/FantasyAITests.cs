@@ -153,5 +153,34 @@ namespace KevChess.Tests
             TestContext.WriteLine("légendes départ : " + fantasy);
             TestContext.WriteLine("légendes milieu (6 éclats) : " + fantasyMid);
         }
+
+        [Test, Explicit("Équilibrage : auto-parties IA contre IA, statistiques d'usage des pouvoirs")]
+        public void SelfPlayBalance()
+        {
+            int games = 30, white = 0, black = 0, draws = 0, plies = 0;
+            var counts = new System.Collections.Generic.Dictionary<string, int>();
+            void Count(string k) { counts.TryGetValue(k, out int n); counts[k] = n + 1; }
+            for (int g = 0; g < games; g++)
+            {
+                var game = new FantasyGame((ulong)(1000 + g));
+                var ais = new[] { new FantasyAI(8, 10 + g), new FantasyAI(8, 50 + g) };
+                for (int i = 0; i < 200 && !game.IsOver; i++)
+                {
+                    var a = ais[(int)game.SideToMove].FindAction(game.Position, Difficulty.Fort, default, 40);
+                    if (a.HasPower) Count(a.Power.ToString());
+                    if (a.Kind != ActionKind.Normal) Count(a.Kind.ToString());
+                    if (!game.LastEvent.IsNone) Count("événement " + game.LastEvent.Kind);
+                    game.TryMakeAction(a);
+                }
+                plies += game.Actions.Count;
+                if (game.Result == GameResult.WhiteWins) white++;
+                else if (game.Result == GameResult.BlackWins) black++;
+                else draws++;
+                TestContext.WriteLine($"partie {g}: {game.Actions.Count} demi-coups, {game.Result} {game.EndReason}");
+                if (game.Actions.Count < 20) TestContext.WriteLine("   " + string.Join(" ", game.Notations) + "   " + game.Position.ToFen());
+            }
+            TestContext.WriteLine($"blancs {white}, noirs {black}, nulles/inachevées {draws}, longueur moyenne {plies / games}");
+            foreach (var kv in counts) TestContext.WriteLine(kv.Key + " : " + kv.Value + " (" + (kv.Value / (double)games).ToString("0.0") + " par partie)");
+        }
     }
 }

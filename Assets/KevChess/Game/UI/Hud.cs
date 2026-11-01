@@ -45,6 +45,9 @@ namespace KevChess.Game.UI
 
         PieceColor localViewSide = PieceColor.White;
 
+        /// <summary>Bouton « Légendes » du menu : l'app bascule vers le mode fantastique.</summary>
+        public event Action LegendsRequested;
+
         public bool IsBlockingOverlayOpen =>
             menuOverlay.activeSelf || aiOverlay.activeSelf || promoOverlay.activeSelf || confirmOverlay.activeSelf || endOverlay.activeSelf;
 
@@ -260,7 +263,7 @@ namespace KevChess.Game.UI
 
         void BuildMenu()
         {
-            menuOverlay = Overlay("Menu", out var card, 900, 1340, UIKit.Cyan);
+            menuOverlay = Overlay("Menu", out var card, 900, 1480, UIKit.Cyan);
             UIKit.VStack(card, 26, 56);
 
             var title = UIKit.Label("Title", card, "KEVCHESS", 110, UIKit.Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
@@ -288,6 +291,13 @@ namespace KevChess.Game.UI
             UIKit.Size(local, 120);
             var vsAI = UIKit.Button("VsAI", card, "Contre l'IA", () => { sfx.Play(Sfx.Click); Show(menuOverlay, false); Show(aiOverlay, true); }, UIKit.Magenta);
             UIKit.Size(vsAI, 120);
+            var legends = UIKit.Button("Legends", card, "Légendes", () =>
+            {
+                sfx.Play(Sfx.Click);
+                Show(menuOverlay, false);
+                LegendsRequested?.Invoke();
+            }, new Color(1f, 0.82f, 0.35f));
+            UIKit.Size(legends, 120);
             soundButton = UIKit.Button("Sound", card, "", () =>
             {
                 sfx.Muted = !sfx.Muted;

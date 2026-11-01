@@ -22,3 +22,6 @@
 tests/**/bin/
 tests/**/obj/
 /.utmp/
+# Fichiers générés par le Performance Testing (builds)
+/Assets/Resources/PerformanceTestRun*
+/Assets/Resources.meta
