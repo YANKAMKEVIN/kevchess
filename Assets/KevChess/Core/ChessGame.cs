@@ -15,6 +15,10 @@ namespace KevChess.Core
         InsufficientMaterial,
         Resignation,
         DrawAgreement,
+        /// <summary>Temps écoulé : défaite du camp tombé.</summary>
+        Timeout,
+        /// <summary>Temps écoulé, mais l'adversaire ne peut pas mater : nulle.</summary>
+        TimeoutInsufficientMaterial,
     }
 
     /// <summary>
@@ -134,6 +138,58 @@ namespace KevChess.Core
             Result = GameResult.Draw;
             EndReason = GameEndReason.DrawAgreement;
             Changed?.Invoke();
+        }
+
+        /// <summary>
+        /// Chute au temps : défaite du camp tombé, sauf si l'adversaire n'a pas de quoi mater
+        /// (roi seul, roi + fou, roi + cavalier), auquel cas la partie est nulle.
+        /// </summary>
+        public void Timeout(PieceColor loser)
+        {
+            if (IsOver) return;
+            if (!HasMatingMaterial(position, Piece.Opposite(loser)))
+            {
+                Result = GameResult.Draw;
+                EndReason = GameEndReason.TimeoutInsufficientMaterial;
+            }
+            else
+            {
+                Result = loser == PieceColor.White ? GameResult.BlackWins : GameResult.WhiteWins;
+                EndReason = GameEndReason.Timeout;
+            }
+            Changed?.Invoke();
+        }
+
+        /// <summary>Faux si le camp n'a que son roi, ou roi + une seule pièce mineure.</summary>
+        public static bool HasMatingMaterial(Position pos, PieceColor color)
+        {
+            int minors = 0;
+            for (int sq = 0; sq < 64; sq++)
+            {
+                int p = pos[sq];
+                if (!Piece.IsColor(p, color)) continue;
+                switch (Piece.TypeOf(p))
+                {
+                    case PieceType.Pawn:
+                    case PieceType.Rook:
+                    case PieceType.Queen:
+                        return true;
+                    case PieceType.Knight:
+                    case PieceType.Bishop:
+                        minors++;
+                        break;
+                }
+            }
+            return minors >= 2;
+        }
+
+        /// <summary>Copie de la position après <paramref name="ply"/> demi-coups (0 = position de départ).</summary>
+        public Position PositionAt(int ply)
+        {
+            if (ply < 0 || ply > moves.Count) throw new ArgumentOutOfRangeException(nameof(ply));
+            var p = Position.FromFen(startFen);
+            for (int i = 0; i < ply; i++) p.MakeMove(moves[i]);
+            return p;
         }
 
         void Refresh()

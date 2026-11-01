@@ -64,6 +64,8 @@ namespace KevChess.Game.Visuals
         public void SetTargetCamera(Camera cam) => targetCamera = cam;
 
         int _lastScreenW, _lastScreenH;
+        Light _accentWhite, _accentBlack, _rim;
+        ParticleSystem _motes;
         bool _probeRequested;
 
         void Awake()
@@ -87,6 +89,28 @@ namespace KevChess.Game.Visuals
                 SetupUrpCamera(targetCamera);
             }
             if (postProcessing) SetupPostProcessing();
+            VisualTheme.Changed += ApplyThemeColors;
+        }
+
+        void OnDestroy()
+        {
+            VisualTheme.Changed -= ApplyThemeColors;
+        }
+
+        /// <summary>Lumières d'appoint et poussières aux couleurs du thème.</summary>
+        void ApplyThemeColors()
+        {
+            if (_accentBlack != null) _accentBlack.color = NeonPalette.BlackGlow;
+            if (_accentWhite != null) _accentWhite.color = NeonPalette.WhiteGlow;
+            if (_rim != null) _rim.color = Color.Lerp(NeonPalette.Indigo, Color.white, 0.2f);
+            if (_motes != null)
+            {
+                var main = _motes.main;
+                main.startColor = new ParticleSystem.MinMaxGradient(
+                    Color.Lerp(NeonPalette.WhiteGlow, Color.white, 0.2f) * new Color(1f, 1f, 1f, 0.9f),
+                    Color.Lerp(NeonPalette.BlackGlow, Color.white, 0.2f) * new Color(1f, 1f, 1f, 0.9f));
+            }
+            _probeRequested = useReflectionProbe;
         }
 
         void Start()
@@ -179,13 +203,13 @@ namespace KevChess.Game.Visuals
             SetupUrpLight(Sun);
 
             // Appoints colorés : magenta côté noirs, cyan côté blancs (reflets sur les facettes).
-            CreatePointLight("Accent Magenta", new Vector3(4.8f, 2.8f, 5.2f), NeonPalette.BlackGlow, accentLightIntensity, 15f);
-            CreatePointLight("Accent Cyan", new Vector3(-4.8f, 2.4f, -5.2f), NeonPalette.WhiteGlow, accentLightIntensity * 0.85f, 15f);
+            _accentBlack = CreatePointLight("Accent Magenta", new Vector3(4.8f, 2.8f, 5.2f), NeonPalette.BlackGlow, accentLightIntensity, 15f);
+            _accentWhite = CreatePointLight("Accent Cyan", new Vector3(-4.8f, 2.4f, -5.2f), NeonPalette.WhiteGlow, accentLightIntensity * 0.85f, 15f);
             // Contre-jour discret pour détacher les silhouettes.
-            CreatePointLight("Rim", new Vector3(0f, 4.5f, 7.5f), new Color(0.6f, 0.55f, 1f), accentLightIntensity * 0.6f, 16f);
+            _rim = CreatePointLight("Rim", new Vector3(0f, 4.5f, 7.5f), Color.Lerp(NeonPalette.Indigo, Color.white, 0.2f), accentLightIntensity * 0.6f, 16f);
         }
 
-        void CreatePointLight(string name, Vector3 position, Color color, float intensity, float range)
+        Light CreatePointLight(string name, Vector3 position, Color color, float intensity, float range)
         {
             var go = new GameObject(name);
             go.transform.SetParent(transform, false);
@@ -196,6 +220,7 @@ namespace KevChess.Game.Visuals
             l.intensity = intensity;
             l.range = range;
             l.shadows = LightShadows.None; // ombres réservées à la lumière principale (perf mobile)
+            return l;
         }
 
         void SetupEnvironment()
@@ -257,6 +282,7 @@ namespace KevChess.Game.Visuals
             go.transform.SetParent(transform, false);
             go.transform.position = new Vector3(0f, 1.6f, 0f);
             var ps = go.AddComponent<ParticleSystem>();
+            _motes = ps;
             ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
 
             var main = ps.main;

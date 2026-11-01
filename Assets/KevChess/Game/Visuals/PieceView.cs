@@ -7,9 +7,10 @@ namespace KevChess.Game.Visuals
 {
     /// <summary>
     /// Représentation visuelle d'une pièce et ses animations :
-    /// déplacement en arc (anticipation, vol, atterrissage avec compression et rebond),
-    /// saut plus haut pour le cavalier, sélection (lévitation + pulsation),
-    /// capture (bris en éclats de lumière), promotion (flash puis changement de forme).
+    /// glissade avec traînée lumineuse (le cavalier, lui, saute en arc), atterrissage avec
+    /// compression et rebond, sélection (lévitation + pulsation), capture (bris en éclats
+    /// de lumière), promotion (flash puis changement de forme), mat (le roi vacille, bascule
+    /// et se brise). Les couleurs suivent <see cref="VisualTheme"/> en direct.
     ///
     /// Hiérarchie : racine (position sur le plateau, sans rotation) → « Visual » (maillage,
     /// squash/stretch, inclinaison, lévitation) ; « Reflection » = copie miroir sous le verre.
@@ -22,7 +23,7 @@ namespace KevChess.Game.Visuals
         float baseMoveDuration = 0.30f;
         [SerializeField, Tooltip("Durée ajoutée par case parcourue (s).")]
         float durationPerSquare = 0.05f;
-        [SerializeField] float arcHeight = 0.32f;
+        [SerializeField, Tooltip("Légère élévation pendant la glissade.")] float glideLift = 0.07f;
         [SerializeField] float knightArcHeight = 0.95f;
 
         [Header("Sélection")]
@@ -58,6 +59,8 @@ namespace KevChess.Game.Visuals
         float _extraLift;           // lévitation hors sélection (promotion)
         Coroutine _motion;
         bool _busy;
+        float _speed = 1f;          // multiplicateur de vitesse des animations de coup
+        TrailRenderer _trail;
 
         // ------------------------------------------------------------------ création
 
@@ -87,8 +90,28 @@ namespace KevChess.Game.Visuals
             _renderer.sharedMaterials = mats;
             _reflectionRenderer.sharedMaterials = mats;
             _lastEmissionFactor = -1f;
+            VisualTheme.Changed -= OnThemeChanged;
+            VisualTheme.Changed += OnThemeChanged;
 
             SetKind(kind);
+        }
+
+        /// <summary>Recopie les couleurs du thème courant dans les instances de matériaux.</summary>
+        void OnThemeChanged()
+        {
+            if (_body == null) return;
+            CopyColors(_body, NeonMaterials.PieceBody(IsWhite));
+            CopyColors(_accent, NeonMaterials.PieceAccent(IsWhite));
+            _bodyEmission = _body.GetColor(NeonMaterials.EmissionColorProperty);
+            _accentEmission = _accent.GetColor(NeonMaterials.EmissionColorProperty);
+            _lastEmissionFactor = -1f;
+            if (_trail != null) _trail.colorGradient = TrailGradient(GlowColor);
+        }
+
+        static void CopyColors(Material target, Material source)
+        {
+            target.SetColor(NeonMaterials.BaseColorProperty, source.GetColor(NeonMaterials.BaseColorProperty));
+            target.SetColor(NeonMaterials.EmissionColorProperty, source.GetColor(NeonMaterials.EmissionColorProperty));
         }
 
         /// <summary>Change la forme de la pièce (sans effet ; voir <see cref="Promote"/>).</summary>
@@ -108,6 +131,7 @@ namespace KevChess.Game.Visuals
             File = file;
             Rank = rank;
             transform.position = WorldOf(file, rank);
+            if (_trail != null) _trail.Clear();
         }
 
         /// <summary>Glisser-déposer : la pièce suit le doigt (position monde), sans animation.</summary>
@@ -115,6 +139,7 @@ namespace KevChess.Game.Visuals
         {
             StopMotion();
             transform.position = worldPosition;
+            if (_trail != null) _trail.Clear();
         }
 
         /// <summary>Affiche ou masque le reflet miroir sous le verre.</summary>
@@ -135,15 +160,17 @@ namespace KevChess.Game.Visuals
         // ------------------------------------------------------------------ déplacement
 
         /// <summary>
-        /// Déplace la pièce en arc jusqu'à la case. <paramref name="onArrived"/> est appelé
-        /// à l'atterrissage (avant la fin du rebond), moment idéal pour déclencher la capture.
+        /// Déplace la pièce jusqu'à la case : glissade avec traînée, ou saut en arc pour le cavalier.
+        /// <paramref name="onArrived"/> est appelé à l'atterrissage (avant la fin du rebond),
+        /// moment idéal pour déclencher la capture. <paramref name="speed"/> : 0,5 = lent, 2 = rapide.
         /// </summary>
-        public Coroutine MoveTo(int file, int rank, Action onArrived = null)
+        public Coroutine MoveTo(int file, int rank, Action onArrived = null, float speed = 1f)
         {
             StopMotion();
             File = file;
             Rank = rank;
             _selectTarget = 0f;
+            _speed = Mathf.Clamp(speed, 0.1f, 8f);
             _motion = StartCoroutine(MoveRoutine(WorldOf(file, rank), onArrived));
             return _motion;
         }
@@ -156,8 +183,8 @@ namespace KevChess.Game.Visuals
             float dist = delta.magnitude;
             bool knight = Kind == PieceKind.Knight;
             float duration = Mathf.Clamp(baseMoveDuration + dist * durationPerSquare, 0.3f, 0.7f) + (knight ? 0.08f : 0f);
-            float arc = knight ? knightArcHeight : arcHeight * Mathf.Lerp(0.8f, 1.6f, Mathf.Clamp01(dist / 7f));
             Vector3 leanAxis = dist > 0.001f ? Vector3.Cross(Vector3.up, delta / dist) : Vector3.right;
+            float moving = dist > 0.001f ? 1f : 0f;
 
             // 1. Anticipation : légère compression.
             yield return Animate(0.07f, k =>
@@ -166,21 +193,43 @@ namespace KevChess.Game.Visuals
                 _squash = new Vector3(1f + 0.06f * s, 1f - 0.12f * s, 1f + 0.06f * s);
             });
 
-            // 2. Vol en arc, avec étirement et inclinaison dans le sens du mouvement.
-            yield return Animate(duration, k =>
+            EnsureTrail(knight);
+            if (moving > 0f) _trail.emitting = true;
+
+            if (knight)
             {
-                float e = EaseInOutCubic(k);
-                Vector3 p = Vector3.Lerp(start, target, e);
-                p.y = start.y + arc * 4f * k * (1f - k);
-                transform.position = p;
-                float stretch = Mathf.Sin(k * Mathf.PI);
-                _squash = new Vector3(1f - 0.05f * stretch, 1f + 0.10f * stretch, 1f - 0.05f * stretch);
-                float leanAngle = Mathf.Sin(k * Mathf.PI) * (knight ? 14f : 9f) * (dist > 0.001f ? 1f : 0f);
-                _lean = Quaternion.AngleAxis(leanAngle, leanAxis);
-            });
+                // 2a. Saut en arc, avec étirement et inclinaison dans le sens du mouvement.
+                yield return Animate(duration, k =>
+                {
+                    float e = EaseInOutCubic(k);
+                    Vector3 p = Vector3.Lerp(start, target, e);
+                    p.y = start.y + knightArcHeight * 4f * k * (1f - k);
+                    transform.position = p;
+                    float stretch = Mathf.Sin(k * Mathf.PI);
+                    _squash = new Vector3(1f - 0.05f * stretch, 1f + 0.10f * stretch, 1f - 0.05f * stretch);
+                    _lean = Quaternion.AngleAxis(Mathf.Sin(k * Mathf.PI) * 14f * moving, leanAxis);
+                });
+            }
+            else
+            {
+                // 2b. Glissade : à peine décollée, penchée vers l'avant au départ puis redressée à l'arrivée.
+                yield return Animate(duration, k =>
+                {
+                    float e = EaseInOutCubic(k);
+                    Vector3 p = Vector3.Lerp(start, target, e);
+                    p.y = start.y + glideLift * Mathf.Sin(k * Mathf.PI);
+                    transform.position = p;
+                    float stretch = Mathf.Sin(k * Mathf.PI);
+                    _squash = new Vector3(1f + 0.03f * stretch, 1f - 0.04f * stretch, 1f + 0.03f * stretch);
+                    // Inclinaison : vers l'avant à l'accélération, en arrière au freinage.
+                    float lean = Mathf.Sin(k * Mathf.PI * 2f) * 7f * moving;
+                    _lean = Quaternion.AngleAxis(lean, leanAxis);
+                });
+            }
 
             transform.position = target;
             _lean = Quaternion.identity;
+            if (_trail != null) _trail.emitting = false;
             NeonEffects.LandingPulse(target, GlowColor);
             onArrived?.Invoke();
 
@@ -188,11 +237,49 @@ namespace KevChess.Game.Visuals
             yield return Animate(0.32f, k =>
             {
                 float t = k * 0.32f;
-                float s = -0.16f * Mathf.Exp(-9f * t) * Mathf.Cos(t * 26f);
+                float s = (knight ? -0.16f : -0.09f) * Mathf.Exp(-9f * t) * Mathf.Cos(t * 26f);
                 _squash = new Vector3(1f - s * 0.5f, 1f + s, 1f - s * 0.5f);
             });
             _squash = Vector3.one;
             _motion = null;
+        }
+
+        /// <summary>Traînée lumineuse créée au premier déplacement (matériau néon partagé).</summary>
+        void EnsureTrail(bool knight)
+        {
+            if (_trail == null)
+            {
+                var go = new GameObject("Trail");
+                go.transform.SetParent(transform, false);
+                _trail = go.AddComponent<TrailRenderer>();
+                _trail.sharedMaterial = NeonMaterials.Trail;
+                _trail.minVertexDistance = 0.03f;
+                _trail.alignment = LineAlignment.View;
+                _trail.textureMode = LineTextureMode.Stretch;
+                _trail.numCapVertices = 2;
+                _trail.shadowCastingMode = ShadowCastingMode.Off;
+                _trail.receiveShadows = false;
+                _trail.lightProbeUsage = LightProbeUsage.Off;
+                _trail.reflectionProbeUsage = ReflectionProbeUsage.Off;
+                _trail.colorGradient = TrailGradient(GlowColor);
+                _trail.emitting = false;
+            }
+            // Le cavalier laisse une traînée plus fine à mi-hauteur ; les autres un sillage au ras du verre.
+            float h = PieceMeshFactory.Height(Kind);
+            _trail.transform.localPosition = new Vector3(0f, knight ? h * 0.45f : 0.16f, 0f);
+            _trail.widthMultiplier = knight ? 0.22f : 0.34f;
+            _trail.widthCurve = new AnimationCurve(new Keyframe(0f, 1f), new Keyframe(1f, 0f));
+            _trail.time = 0.3f / _speed; // même longueur de sillage quelle que soit la vitesse
+            _trail.Clear();
+        }
+
+        static Gradient TrailGradient(Color glow)
+        {
+            var g = new Gradient();
+            g.SetKeys(
+                new[] { new GradientColorKey(Color.Lerp(glow, Color.white, 0.35f), 0f), new GradientColorKey(glow, 1f) },
+                new[] { new GradientAlphaKey(0.9f, 0f), new GradientAlphaKey(0.45f, 0.4f), new GradientAlphaKey(0f, 1f) });
+            return g;
         }
 
         // ------------------------------------------------------------------ capture
@@ -201,10 +288,11 @@ namespace KevChess.Game.Visuals
         /// Capture : la pièce s'illumine, se brise en éclats de lumière puis l'objet est détruit.
         /// <paramref name="onDone"/> est appelé juste avant la destruction.
         /// </summary>
-        public void Capture(Action onDone = null)
+        public void Capture(Action onDone = null, float speed = 1f)
         {
             StopMotion();
             _busy = true;
+            _speed = Mathf.Clamp(speed, 0.1f, 8f);
             _selectTarget = 0f;
             StartCoroutine(CaptureRoutine(onDone));
         }
@@ -238,9 +326,10 @@ namespace KevChess.Game.Visuals
         // ------------------------------------------------------------------ promotion
 
         /// <summary>Promotion : flash de lumière, changement de forme au pic, puis retour en douceur.</summary>
-        public Coroutine Promote(PieceKind newKind, Action onDone = null)
+        public Coroutine Promote(PieceKind newKind, Action onDone = null, float speed = 1f)
         {
             _busy = true;
+            _speed = Mathf.Clamp(speed, 0.1f, 8f);
             return StartCoroutine(PromoteRoutine(newKind, onDone));
         }
 
@@ -271,6 +360,66 @@ namespace KevChess.Game.Visuals
             _squash = Vector3.one;
             _busy = false;
             onDone?.Invoke();
+        }
+
+        // ------------------------------------------------------------------ mat
+
+        /// <summary>
+        /// Roi maté : il vacille, bascule vers son camp, puis se brise en éclats (≈ 1,6 s).
+        /// <paramref name="onShattered"/> est appelé au moment du bris ; l'objet est ensuite détruit.
+        /// </summary>
+        public Coroutine Checkmate(Action onShattered = null)
+        {
+            StopMotion();
+            _busy = true;
+            _selectTarget = 0f;
+            _speed = 1f;
+            return StartCoroutine(CheckmateRoutine(onShattered));
+        }
+
+        IEnumerator CheckmateRoutine(Action onShattered)
+        {
+            float h = PieceMeshFactory.Height(Kind);
+            Vector3 fall = IsWhite ? Vector3.back : Vector3.forward; // il tombe vers son propre camp
+            Vector3 axis = Vector3.Cross(Vector3.up, fall);
+
+            // 1. Vacillement d'amplitude croissante, la lueur monte.
+            yield return Animate(0.75f, k =>
+            {
+                float amp = Mathf.Lerp(2f, 10f, k * k);
+                _lean = Quaternion.AngleAxis(Mathf.Sin(k * 24f) * amp, axis) * Quaternion.AngleAxis(Mathf.Sin(k * 17f + 1f) * amp * 0.6f, fall);
+                _flash = k * 1.5f;
+            });
+
+            // 2. Bascule : chute accélérée jusqu'à presque l'horizontale (soulevée pour ne pas traverser le verre).
+            yield return Animate(0.42f, k =>
+            {
+                float e = k * k;
+                _lean = Quaternion.AngleAxis(e * 80f, axis);
+                _extraLift = 0.16f * Mathf.Sin(e * Mathf.PI * 0.5f);
+                _flash = 1.5f + k;
+            });
+            NeonEffects.LandingPulse(transform.position + fall * h * 0.5f, GlowColor);
+
+            // Petit rebond à l'impact, la pièce se charge de lumière.
+            yield return Animate(0.2f, k =>
+            {
+                _lean = Quaternion.AngleAxis(80f - 7f * Mathf.Sin(k * Mathf.PI), axis);
+                _flash = 2.5f + k * 3.5f;
+            });
+
+            // 3. Bris.
+            NeonEffects.Shatter(transform.position + fall * h * 0.45f + Vector3.up * 0.05f, 0.5f, GlowColor);
+            NeonEffects.Shatter(transform.position + fall * h * 0.8f, 0.4f, GlowColor);
+            onShattered?.Invoke();
+            yield return Animate(0.18f, k =>
+            {
+                _flash = 6f + k * 4f;
+                float s = 1f - k;
+                _squash = new Vector3(s * 1.2f, s, s * 1.2f);
+            });
+            _busy = false;
+            Destroy(gameObject);
         }
 
         // ------------------------------------------------------------------ boucle
@@ -321,6 +470,7 @@ namespace KevChess.Game.Visuals
 
         void OnDestroy()
         {
+            VisualTheme.Changed -= OnThemeChanged;
             ReleaseMaterials();
         }
 
@@ -366,16 +516,17 @@ namespace KevChess.Game.Visuals
             }
             _squash = Vector3.one;
             _lean = Quaternion.identity;
+            if (_trail != null) _trail.emitting = false;
         }
 
         static Vector3 WorldOf(int file, int rank) => BoardBuilder.SquareToWorld(file, rank);
 
-        static IEnumerator Animate(float duration, Action<float> step)
+        IEnumerator Animate(float duration, Action<float> step)
         {
             float t = 0f;
             while (t < duration)
             {
-                t += Time.deltaTime;
+                t += Time.deltaTime * _speed;
                 step(Mathf.Clamp01(t / duration));
                 yield return null;
             }

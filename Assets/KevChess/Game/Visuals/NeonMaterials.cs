@@ -3,19 +3,19 @@ using UnityEngine.Rendering;
 
 namespace KevChess.Game.Visuals
 {
-    /// <summary>Palette de la direction artistique « cristal / néon ».</summary>
+    /// <summary>Palette active (suit <see cref="VisualTheme"/>).</summary>
     public static class NeonPalette
     {
-        /// <summary>Lueur des pièces blanches (cyan froid).</summary>
-        public static readonly Color WhiteGlow = new Color(0.35f, 0.92f, 1.00f);
-        /// <summary>Lueur des pièces noires (magenta / violet).</summary>
-        public static readonly Color BlackGlow = new Color(1.00f, 0.22f, 0.85f);
-        public static readonly Color Selection = new Color(0.45f, 1.00f, 0.95f);
-        public static readonly Color LegalMove = new Color(0.55f, 0.85f, 1.00f);
-        public static readonly Color Capture = new Color(1.00f, 0.38f, 0.55f);
-        public static readonly Color LastMove = new Color(1.00f, 0.72f, 0.30f);
-        public static readonly Color Check = new Color(1.00f, 0.08f, 0.12f);
-        public static readonly Color Indigo = new Color(0.50f, 0.42f, 1.00f);
+        /// <summary>Lueur des pièces blanches (cyan froid dans le thème Néon).</summary>
+        public static Color WhiteGlow => VisualTheme.Palette.WhiteGlow;
+        /// <summary>Lueur des pièces noires (magenta dans le thème Néon).</summary>
+        public static Color BlackGlow => VisualTheme.Palette.BlackGlow;
+        public static Color Selection => VisualTheme.Palette.Selection;
+        public static Color LegalMove => VisualTheme.Palette.LegalMove;
+        public static Color Capture => VisualTheme.Palette.Capture;
+        public static Color LastMove => VisualTheme.Palette.LastMove;
+        public static Color Check => VisualTheme.Palette.Check;
+        public static Color Indigo => VisualTheme.Palette.Side;
         public static readonly Color Fog = new Color(0.028f, 0.018f, 0.065f);
 
         public static Color Glow(bool white) => white ? WhiteGlow : BlackGlow;
@@ -66,98 +66,163 @@ namespace KevChess.Game.Visuals
         // Niveaux d'émission (HDR) : > 1 pour déclencher le bloom.
         const float AccentIntensity = 3.2f;
 
-        static Material _whiteBody, _blackBody, _whiteAccent, _blackAccent;
-        static Material _boardDark, _boardLight, _boardGrid, _frame, _frameSouth, _frameNorth, _frameSide, _frameLip, _abyss, _labels;
-        static Material _selection, _legal, _capture, _lastMove, _check, _sparks, _shards, _rings, _motes, _skybox;
+        static Material _sparks, _shards, _rings, _motes, _trail, _frame, _skybox;
+
+        // Matériaux teintés par le thème : créés à la demande, recolorés par ApplyTheme.
+        enum Slot
+        {
+            WhiteBody, BlackBody, WhiteAccent, BlackAccent,
+            BoardDark, BoardLight, BoardGrid, FrameSouth, FrameNorth, FrameSide, FrameLip, Abyss, Labels,
+            Selection, Legal, Capture, LastMove, Check, Count
+        }
+
+        static readonly Material[] _themed = new Material[(int)Slot.Count];
 
         // ------------------------------------------------------------------ pièces
 
         /// <summary>Corps cristal d'une pièce (blanc = cristal clair, noir = cristal fumé).</summary>
-        public static Material PieceBody(bool white)
-        {
-            if (white)
-                return _whiteBody != null ? _whiteBody : (_whiteBody = CreateLitOpaque("KevChess_WhiteCrystal",
-                    new Color(0.70f, 0.84f, 0.97f), 0.35f, 0.93f, new Color(0.05f, 0.16f, 0.22f)));
-            return _blackBody != null ? _blackBody : (_blackBody = CreateLitOpaque("KevChess_BlackCrystal",
-                new Color(0.045f, 0.03f, 0.075f), 0.55f, 0.95f, new Color(0.10f, 0.015f, 0.13f)));
-        }
+        public static Material PieceBody(bool white) => Get(white ? Slot.WhiteBody : Slot.BlackBody);
 
         /// <summary>Accents néon d'une pièce (sous-maillage 1).</summary>
-        public static Material PieceAccent(bool white)
-        {
-            if (white)
-                return _whiteAccent != null ? _whiteAccent : (_whiteAccent = CreateLitOpaque("KevChess_WhiteNeon",
-                    new Color(0.6f, 0.95f, 1f), 0f, 0.9f, NeonPalette.WhiteGlow * AccentIntensity));
-            return _blackAccent != null ? _blackAccent : (_blackAccent = CreateLitOpaque("KevChess_BlackNeon",
-                new Color(1f, 0.5f, 0.9f), 0f, 0.9f, NeonPalette.BlackGlow * AccentIntensity));
-        }
+        public static Material PieceAccent(bool white) => Get(white ? Slot.WhiteAccent : Slot.BlackAccent);
 
         // ------------------------------------------------------------------ plateau
 
         /// <summary>Cases sombres : verre fumé / obsidienne, semi-transparent et très brillant.</summary>
-        public static Material BoardDark => _boardDark != null ? _boardDark : (_boardDark = CreateLitTransparent("KevChess_BoardDark",
-            new Color(0.012f, 0.010f, 0.028f, 0.66f), 0.45f, 0.97f, new Color(0.004f, 0.002f, 0.012f)));
+        public static Material BoardDark => Get(Slot.BoardDark);
 
-        /// <summary>Cases claires : verre givré bleuté, plus opaque.</summary>
-        public static Material BoardLight => _boardLight != null ? _boardLight : (_boardLight = CreateLitTransparent("KevChess_BoardLight",
-            new Color(0.28f, 0.31f, 0.44f, 0.80f), 0.2f, 0.92f, new Color(0.025f, 0.035f, 0.065f)));
+        /// <summary>Cases claires : verre givré, plus opaque.</summary>
+        public static Material BoardLight => Get(Slot.BoardLight);
 
         /// <summary>Fines lignes néon entre les cases.</summary>
-        public static Material BoardGrid => _boardGrid != null ? _boardGrid : (_boardGrid = CreateLitOpaque("KevChess_BoardGrid",
-            Color.black, 0f, 0.5f, new Color(0.30f, 0.55f, 1.0f) * 1.1f));
+        public static Material BoardGrid => Get(Slot.BoardGrid);
 
-        /// <summary>Cadre : métal sombre poli.</summary>
+        /// <summary>Cadre : métal sombre poli (commun à tous les thèmes).</summary>
         public static Material Frame => _frame != null ? _frame : (_frame = CreateLitOpaque("KevChess_Frame",
             new Color(0.035f, 0.035f, 0.055f), 0.85f, 0.88f, Color.black));
 
         /// <summary>Liseré néon du côté des blancs.</summary>
-        public static Material FrameNeonSouth => _frameSouth != null ? _frameSouth : (_frameSouth = CreateLitOpaque("KevChess_FrameNeonSouth",
-            Color.black, 0f, 0.8f, NeonPalette.WhiteGlow * 2.6f));
+        public static Material FrameNeonSouth => Get(Slot.FrameSouth);
 
         /// <summary>Liseré néon du côté des noirs.</summary>
-        public static Material FrameNeonNorth => _frameNorth != null ? _frameNorth : (_frameNorth = CreateLitOpaque("KevChess_FrameNeonNorth",
-            Color.black, 0f, 0.8f, NeonPalette.BlackGlow * 2.6f));
+        public static Material FrameNeonNorth => Get(Slot.FrameNorth);
 
         /// <summary>Liseré néon des côtés latéraux.</summary>
-        public static Material FrameNeonSide => _frameSide != null ? _frameSide : (_frameSide = CreateLitOpaque("KevChess_FrameNeonSide",
-            Color.black, 0f, 0.8f, NeonPalette.Indigo * 2.3f));
+        public static Material FrameNeonSide => Get(Slot.FrameSide);
 
         /// <summary>Lèvre intérieure lumineuse qui entoure l'aire de jeu.</summary>
-        public static Material FrameLip => _frameLip != null ? _frameLip : (_frameLip = CreateLitOpaque("KevChess_FrameLip",
-            Color.black, 0f, 0.8f, new Color(0.40f, 0.62f, 1.0f) * 1.5f));
+        public static Material FrameLip => Get(Slot.FrameLip);
 
         /// <summary>Sol de l'abîme sous le verre : obsidienne + grille lumineuse lointaine.</summary>
-        public static Material Abyss
-        {
-            get
-            {
-                if (_abyss != null) return _abyss;
-                _abyss = CreateLitOpaque("KevChess_Abyss", new Color(0.01f, 0.008f, 0.02f), 0.2f, 0.7f, new Color(0.22f, 0.14f, 0.60f) * 0.9f);
-                _abyss.SetTexture(EmissionMapId, NeonTextures.Grid);
-                return _abyss;
-            }
-        }
+        public static Material Abyss => Get(Slot.Abyss);
 
         /// <summary>Coordonnées a–h / 1–8 discrètes.</summary>
-        public static Material Labels => _labels != null ? _labels : (_labels = CreateLitOpaque("KevChess_Labels",
-            Color.black, 0f, 0.5f, new Color(0.45f, 0.70f, 1.0f) * 0.75f));
+        public static Material Labels => Get(Slot.Labels);
 
         // ------------------------------------------------------------------ surlignages (additifs)
 
         /// <summary>Case sélectionnée : cadre lumineux.</summary>
-        public static Material SelectionHighlight => _selection != null ? _selection : (_selection = CreateAdditive("KevChess_Selection", NeonTextures.SquareFrame, NeonPalette.Selection * 2.2f, 20));
+        public static Material SelectionHighlight => Get(Slot.Selection);
 
         /// <summary>Coup légal sur case vide : point lumineux.</summary>
-        public static Material LegalMove => _legal != null ? _legal : (_legal = CreateAdditive("KevChess_LegalMove", NeonTextures.RadialGlow, NeonPalette.LegalMove * 1.8f, 21));
+        public static Material LegalMove => Get(Slot.Legal);
 
         /// <summary>Coup légal avec prise : anneau lumineux.</summary>
-        public static Material LegalCapture => _capture != null ? _capture : (_capture = CreateAdditive("KevChess_LegalCapture", NeonTextures.Ring, NeonPalette.Capture * 2.2f, 21));
+        public static Material LegalCapture => Get(Slot.Capture);
 
-        /// <summary>Cases du dernier coup : voile ambré discret.</summary>
-        public static Material LastMove => _lastMove != null ? _lastMove : (_lastMove = CreateAdditive("KevChess_LastMove", NeonTextures.SoftSquare, NeonPalette.LastMove * 0.55f, 19));
+        /// <summary>Cases du dernier coup : voile discret.</summary>
+        public static Material LastMove => Get(Slot.LastMove);
 
         /// <summary>Roi en échec : halo rouge (sa couleur est pulsée par <see cref="BoardHighlights"/>).</summary>
-        public static Material Check => _check != null ? _check : (_check = CreateAdditive("KevChess_Check", NeonTextures.RadialGlow, NeonPalette.Check * 2.5f, 22));
+        public static Material Check => Get(Slot.Check);
+
+        // ------------------------------------------------------------------ thème
+
+        /// <summary>Recolore les matériaux partagés déjà créés selon <see cref="VisualTheme"/>.</summary>
+        internal static void ApplyTheme()
+        {
+            for (int i = 0; i < _themed.Length; i++)
+                if (_themed[i] != null) Paint((Slot)i, _themed[i]);
+        }
+
+        static Material Get(Slot slot)
+        {
+            var m = _themed[(int)slot];
+            if (m != null) return m;
+            m = Create(slot);
+            Paint(slot, m);
+            _themed[(int)slot] = m;
+            return m;
+        }
+
+        static Material Create(Slot slot)
+        {
+            switch (slot)
+            {
+                case Slot.WhiteBody: return CreateLitOpaque("KevChess_WhiteCrystal", Color.white, 0.35f, 0.93f, Color.black);
+                case Slot.BlackBody: return CreateLitOpaque("KevChess_BlackCrystal", Color.black, 0.55f, 0.95f, Color.black);
+                case Slot.WhiteAccent: return CreateLitOpaque("KevChess_WhiteNeon", Color.white, 0f, 0.9f, Color.black);
+                case Slot.BlackAccent: return CreateLitOpaque("KevChess_BlackNeon", Color.white, 0f, 0.9f, Color.black);
+                case Slot.BoardDark: return CreateLitTransparent("KevChess_BoardDark", Color.black, 0.45f, 0.97f, Color.black);
+                case Slot.BoardLight: return CreateLitTransparent("KevChess_BoardLight", Color.black, 0.2f, 0.92f, Color.black);
+                case Slot.BoardGrid: return CreateLitOpaque("KevChess_BoardGrid", Color.black, 0f, 0.5f, Color.black);
+                case Slot.FrameSouth: return CreateLitOpaque("KevChess_FrameNeonSouth", Color.black, 0f, 0.8f, Color.black);
+                case Slot.FrameNorth: return CreateLitOpaque("KevChess_FrameNeonNorth", Color.black, 0f, 0.8f, Color.black);
+                case Slot.FrameSide: return CreateLitOpaque("KevChess_FrameNeonSide", Color.black, 0f, 0.8f, Color.black);
+                case Slot.FrameLip: return CreateLitOpaque("KevChess_FrameLip", Color.black, 0f, 0.8f, Color.black);
+                case Slot.Abyss:
+                    var abyss = CreateLitOpaque("KevChess_Abyss", new Color(0.01f, 0.008f, 0.02f), 0.2f, 0.7f, Color.black);
+                    abyss.SetTexture(EmissionMapId, NeonTextures.Grid);
+                    return abyss;
+                case Slot.Labels: return CreateLitOpaque("KevChess_Labels", Color.black, 0f, 0.5f, Color.black);
+                case Slot.Selection: return CreateAdditive("KevChess_Selection", NeonTextures.SquareFrame, Color.white, 20);
+                case Slot.Legal: return CreateAdditive("KevChess_LegalMove", NeonTextures.RadialGlow, Color.white, 21);
+                case Slot.Capture: return CreateAdditive("KevChess_LegalCapture", NeonTextures.Ring, Color.white, 21);
+                case Slot.LastMove: return CreateAdditive("KevChess_LastMove", NeonTextures.SoftSquare, Color.white, 19);
+                default: return CreateAdditive("KevChess_Check", NeonTextures.RadialGlow, Color.white, 22);
+            }
+        }
+
+        /// <summary>Couleurs d'un emplacement selon le thème et le mode lisibilité.</summary>
+        static void Paint(Slot slot, Material m)
+        {
+            var p = VisualTheme.Palette;
+            bool hc = VisualTheme.HighContrast;
+            float accent = AccentIntensity * (hc ? 1.45f : 1f);
+            float body = hc ? 1.8f : 1f;
+            float line = hc ? 1.8f : 1f;
+            switch (slot)
+            {
+                case Slot.WhiteBody: Lit(m, p.WhiteBody, p.WhiteBodyEmission * body); break;
+                case Slot.BlackBody: Lit(m, p.BlackBody, p.BlackBodyEmission * body); break;
+                case Slot.WhiteAccent: Lit(m, Color.Lerp(p.WhiteGlow, Color.white, 0.4f), p.WhiteGlow * accent); break;
+                case Slot.BlackAccent: Lit(m, Color.Lerp(p.BlackGlow, Color.white, 0.4f), p.BlackGlow * accent); break;
+                case Slot.BoardDark: Lit(m, p.BoardDark, p.BoardDarkEmission); break;
+                case Slot.BoardLight:
+                    // Lisibilité : cases claires plus claires, pour mieux détacher les pièces sombres.
+                    Lit(m, hc ? Color.Lerp(p.BoardLight, new Color(1f, 1f, 1f, p.BoardLight.a), 0.18f) : p.BoardLight,
+                        p.BoardLightEmission * (hc ? 1.6f : 1f));
+                    break;
+                case Slot.BoardGrid: Lit(m, Color.black, p.Grid * 1.1f * line); break;
+                case Slot.FrameSouth: Lit(m, Color.black, p.WhiteGlow * 2.6f * line); break;
+                case Slot.FrameNorth: Lit(m, Color.black, p.BlackGlow * 2.6f * line); break;
+                case Slot.FrameSide: Lit(m, Color.black, p.Side * 2.3f * line); break;
+                case Slot.FrameLip: Lit(m, Color.black, p.Lip * 1.5f * line); break;
+                case Slot.Abyss: m.SetColor(EmissionColorId, p.Abyss * 0.9f); break;
+                case Slot.Labels: Lit(m, Color.black, p.Labels * (hc ? 2.4f : 0.75f)); break;
+                case Slot.Selection: m.SetColor(BaseColorId, p.Selection * 2.2f * (hc ? 1.3f : 1f)); break;
+                case Slot.Legal: m.SetColor(BaseColorId, p.LegalMove * 1.8f * (hc ? 1.4f : 1f)); break;
+                case Slot.Capture: m.SetColor(BaseColorId, p.Capture * 2.2f * (hc ? 1.3f : 1f)); break;
+                case Slot.LastMove: m.SetColor(BaseColorId, p.LastMove * 0.55f * (hc ? 1.5f : 1f)); break;
+                case Slot.Check: m.SetColor(BaseColorId, p.Check * 2.5f); break;
+            }
+        }
+
+        static void Lit(Material m, Color baseColor, Color emission)
+        {
+            m.SetColor(BaseColorId, baseColor);
+            m.SetColor(EmissionColorId, emission);
+        }
 
         // ------------------------------------------------------------------ effets
 
@@ -169,6 +234,9 @@ namespace KevChess.Game.Visuals
 
         /// <summary>Anneaux d'onde au sol.</summary>
         public static Material Rings => _rings != null ? _rings : (_rings = CreateAdditive("KevChess_Rings", NeonTextures.Ring, Color.white * 2.5f, 38));
+
+        /// <summary>Traînée lumineuse d'une pièce qui glisse, flèche d'indice (texture : bande douce).</summary>
+        public static Material Trail => _trail != null ? _trail : (_trail = CreateAdditive("KevChess_Trail", NeonTextures.SoftLine, Color.white * 2.4f, 37));
 
         /// <summary>Poussières lumineuses d'ambiance.</summary>
         public static Material Motes => _motes != null ? _motes : (_motes = CreateAdditive("KevChess_Motes", NeonTextures.RadialGlow, Color.white * 1.6f, 30));
