@@ -2,7 +2,7 @@
 
 Jeu d'échecs 3D original pour Android, iOS et macOS. Direction artistique « cristal / néon », tout généré par code (aucun modèle ni son importé).
 
-Dernière mise à jour : 2026-10-31.
+Dernière mise à jour : 2026-11-02.
 
 Dépôt : https://github.com/YANKAMKEVIN/kevchess (privé).
 
@@ -30,7 +30,7 @@ Assets/KevChess/
     Match/   MatchController (tours humain/IA, annulation, indice, sauvegarde PlayerPrefs), BoardInteraction, AIAdapter
     Input/   PointerInput (tactile EnhancedTouch + souris → tap / double-tap / glisser / pincer)
     Camera/  OrbitCamera (orbite lissée, cadrage portrait/paysage, respiration, parallaxe accéléromètre)
-    UI/      Hud (uGUI construit par code : bandeau joueurs, statut, coups, menu, IA, promotion, fin de partie)
+    UI/      Hud (uGUI construit par code : bandeau joueurs + horloge, statut, coups, ouverture, menu, IA, promotion, fin de partie), Hud.Screens (réglages, puzzles, analyse, statistiques, nulle), Hud.Review (mode revue), GamePrefs (préférences PlayerPrefs)
     Audio/   SoundBank (sons de verre/cristal synthétisés), Haptics (vibrations Android, désactivables)
     App/     KevChessApp : point d'entrée, se crée seul au chargement de la scène
     Legends/ mode Légendes : LegendsMode (bascule), LegendsController, LegendsBoardView (personnages, duels, DuelCamera), LivingBoard, LegendsHud, LegendsInteraction
@@ -65,6 +65,13 @@ Temps de réflexion par niveau (bench `AIBench`, 6 positions fixes, livre coupé
 
 ~300–480 k nœuds/s sur l'A17. Budgets gardés tels quels : rien ne dépasse 3 s sur le téléphone le plus lent, et les niveaux bas restent rythmés par l'attente minimale de 0,45 s (`MatchController.MinAIThinkSeconds`). S24 non mesuré (débranché), forcément plus rapide.
 Lancer le bench : `adb shell am start -S -n com.kevinyankam.kevchess/com.unity3d.player.UnityPlayerGameActivity -e kevchess aibench` puis `adb logcat -s Unity | grep bench` (Mac : `-kevchess-aibench`). En partie, chaque coup de l'IA écrit `[KevChess] IA <niveau> : <ms> (profondeur, nœuds…)`.
+
+## Les 20 améliorations (2026-11-01)
+
+Logique (Core/AI, testée) : horloge `ChessClock` + cadences `TimeControl.Presets` (Sans limite, 1+0, 3+2, 5+0, 10+5, 15+10 ; chute au temps → nulle si l'adversaire ne peut pas mater) ; `ChessGame.PositionAt` (revue) ; notation française `Notation.Localize` ; noms d'ouvertures `OpeningNames` (90 lignes) ; analyse `GameAnalyzer` (précision par camp, excellent / bon / imprécision / erreur / gaffe, meilleur coup) ; 32 puzzles `PuzzleSet` (mats en 1/2/3, chacun validé par test) + `PuzzleSession` ; nulle proposée à l'IA `ChessAI.AcceptsDrawAsync`.
+Visuels et son : 4 thèmes `VisualTheme` (Néon, Aurore, Émeraude, Glace & Braise) + lisibilité renforcée ; animation de mat (roi qui bascule et se brise, onde de choc, étincelles) ; flèche 3D d'indice ; cavalier qui saute en arc, traînées lumineuses ; `BoardView.AnimationSpeed` ; musique d'ambiance générative `AmbientMusic` (coupée par défaut) ; sons roque, promotion, mat, chute, tic d'horloge, puzzle.
+Interface : horloge dans les cartes (alerte sous 10 s) et choix de la cadence ; mode revue ⏮ ◀ ▶ ⏭ (+ « Reprendre d'ici ») ; écran d'analyse (toucher une gaffe → revue avec flèche du meilleur coup) ; puzzles (liste, progression, indice, suivant) ; Réglages (son, vibrations, thème, lisibilité, notation, vitesse, musique + volume, caméra qui se retourne en partie à deux) ; statistiques par niveau d'IA ; proposer nulle ; copier le PGN ; « L'IA réfléchit… » ; nom de l'ouverture. Actions secondaires dans « Plus… » (barre du bas).
+Vérifié : 195 tests (avant fusion des Légendes), autotest Mac étendu vert (revue, analyse, mat animé, chute au temps, nulle, PGN, puzzle juste et faux, changement de thème, partie 3+2 contre l'IA), captures en portrait regardées. Android (A17, APK depuis main avec les Légendes) : nouveau menu (Légendes, Puzzles, Réglages), liste des puzzles, puzzle 1 résolu au glisser (Ta8#, « Résolu ! »). Corrigé après cette recette : en puzzle, les rangées de pièces prises montraient toutes les pièces absentes du jeu complet ; elles comptent maintenant depuis la position de départ de la partie (`BoardView.SetTrayBaseline`). Non vérifié : sons et musique à l'oreille (synthétisés, jamais écoutés), recette tactile complète des nouveaux écrans sur téléphone.
 
 ## Builds et recette (2026-10-31)
 
@@ -110,4 +117,5 @@ Pièges rencontrés :
 - [ ] V1.1 : Stockfish via `IChessEngine` (AIAdapter est le seul point à changer)
 - [x] Glisser-déposer, pièces prises en 3D, vibrations
 - [ ] Mode Légendes (`docs/design/mode-fantastique.md`, branche `feature/legendes`) : règles, plateau vivant, IA, personnages procéduraux, duels de capture, plateau vivant visuel et interface faits ; bouton « Légendes » dans le menu. Recette : `-kevchess-legends-autotest <dossier>`. Reste : recette Android (S24), équilibrage par auto-parties IA contre IA, retouches visuelles (chevalier, sentinelle, reflets des personnages). IA : profondeur 9 en 0,5 s au départ (classique 10), 6 en milieu de partie avec pouvoirs
-- [ ] Idées : horloge, thèmes, analyse de partie, export PGN
+- [x] Horloge, thèmes, analyse de partie, export PGN, puzzles, réglages (les 20 améliorations)
+- [ ] Écouter les sons et la musique d'ambiance, recette tactile des nouveaux écrans sur téléphone

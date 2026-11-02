@@ -144,6 +144,7 @@ namespace KevChess.Game.View
 
         public void ShowState(ChessGame game)
         {
+            SetTrayBaseline(game.Moves.Count == 0 ? game.Position : game.PositionAt(0));
             RefreshTrays(game.Position);
             var last = game.LastMove;
             if (last.IsNull) highlights.ClearLastMove();
@@ -338,6 +339,23 @@ namespace KevChess.Game.View
         const float PortraitTrayOffset = 5.0f;
         static readonly PieceType[] TrayOrder = { PieceType.Queen, PieceType.Rook, PieceType.Bishop, PieceType.Knight, PieceType.Pawn };
         static readonly int[] StartCount = { 0, 8, 2, 2, 2, 1, 0 }; // indexé par PieceType
+        // Pièces de la position de départ de la partie (un puzzle ne part pas du jeu complet) : seules les pièces
+        // prises depuis ce départ vont dans les rangées.
+        readonly int[,] baseCount = new int[2, 7];
+        bool hasBaseline;
+
+        void SetTrayBaseline(Position start)
+        {
+            hasBaseline = true;
+            for (int c = 0; c < 2; c++)
+                for (int t = 1; t <= 5; t++)
+                {
+                    int count = 0;
+                    for (int sq = 0; sq < 64; sq++)
+                        if (start[sq] == Piece.Make((PieceColor)c, (PieceType)t)) count++;
+                    baseCount[c, t] = count;
+                }
+        }
 
         Transform trayRoot;
         string trayKey;
@@ -369,7 +387,7 @@ namespace KevChess.Game.View
                     for (int sq = 0; sq < 64; sq++)
                         if (position[sq] == Piece.Make((PieceColor)c, (PieceType)t)) count++;
                     // Une promotion peut donner plus de pièces qu'au départ : on ne compte que les manquantes.
-                    missing[c, t] = Mathf.Max(0, StartCount[t] - count);
+                    missing[c, t] = Mathf.Max(0, (hasBaseline ? baseCount[c, t] : StartCount[t]) - count);
                     sb.Append(missing[c, t]);
                 }
             string key = sb.ToString();
