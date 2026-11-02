@@ -76,7 +76,7 @@ namespace KevChess.Game.Legends
                 foreach (int sq in new[] { pos.PortalA, pos.PortalB })
                     if (features.TryGetValue(sq, out var f))
                     {
-                        f.Material.SetColor(NeonMaterials.BaseColorProperty, PortalColor * (open ? 3f : 0.9f));
+                        f.Material.SetColor(NeonMaterials.BaseColorProperty, PortalColor * (open ? 1.5f : 0.6f));
                         if (f.Countdown != null) f.Countdown.text = pos.PortalTimer.ToString();
                     }
             }
@@ -124,17 +124,18 @@ namespace KevChess.Game.Legends
                 case 2:
                     var dark = NeonMaterials.CreateLitOpaque("KevChess_Chasm", new Color(0.005f, 0.004f, 0.01f), 0f, 0.1f, Color.black);
                     Quad(f.Root.transform, dark, 0.96f, 0.02f);
-                    f.Material = NeonMaterials.CreateAdditive("KevChess_ChasmRim", NeonTextures.SquareFrame, ChasmRim * 2.2f, 18);
-                    Quad(f.Root.transform, f.Material, 1.02f, 0.03f);
+                    // Bord brisé discret : un vide sombre, pas une case sélectionnée.
+                    f.Material = NeonMaterials.CreateAdditive("KevChess_ChasmRim", CrackTexture, ChasmRim * 0.9f, 18);
+                    Quad(f.Root.transform, f.Material, 1.0f, 0.03f);
                     f.Countdown = Label(f.Root.transform, ChasmRim);
                     break;
                 case 3:
-                    f.Material = NeonMaterials.CreateAdditive("KevChess_Portal", NeonTextures.Ring, PortalColor * 2f, 18);
+                    f.Material = NeonMaterials.CreateAdditive("KevChess_Portal", NeonTextures.Ring, PortalColor * 1.3f, 18);
                     var spin = new GameObject("Spin").transform;
                     spin.SetParent(f.Root.transform, false);
                     Quad(spin, f.Material, 0.95f, 0.035f);
-                    var inner = NeonMaterials.CreateAdditive("KevChess_PortalCore", NeonTextures.RadialGlow, PortalColor * 1.2f, 17);
-                    Quad(spin, inner, 0.7f, 0.03f);
+                    var inner = NeonMaterials.CreateAdditive("KevChess_PortalCore", NeonTextures.RadialGlow, PortalColor * 0.45f, 17);
+                    Quad(spin, inner, 0.55f, 0.03f);
                     f.Spin = spin;
                     f.Countdown = Label(f.Root.transform, PortalColor);
                     break;
@@ -143,6 +144,7 @@ namespace KevChess.Game.Legends
                         crystalMaterial = NeonMaterials.CreateLitTransparent("KevChess_Crystal", new Color(1f, 0.85f, 0.4f, 0.55f), 0.1f, 0.95f, CrystalColor * 2.2f);
                     var cluster = new GameObject("Cluster").transform;
                     cluster.SetParent(f.Root.transform, false);
+                    cluster.localScale = Vector3.one * 0.55f; // bouquet contenu dans sa case
                     for (int i = 0; i < 5; i++)
                     {
                         var shard = new GameObject("Shard" + i);
@@ -247,7 +249,7 @@ namespace KevChess.Game.Legends
                 else
                 {
                     f.Spin.localRotation = Quaternion.Euler(0f, time * 25f, 0f);
-                    f.Spin.localPosition = new Vector3(0f, 0.12f + 0.05f * Mathf.Sin(time * 2.2f), 0f);
+                    f.Spin.localPosition = new Vector3(0f, 0.04f + 0.03f * Mathf.Sin(time * 2.2f), 0f);
                 }
             }
         }

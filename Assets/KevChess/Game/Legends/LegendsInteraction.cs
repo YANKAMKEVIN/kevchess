@@ -46,7 +46,10 @@ namespace KevChess.Game.Legends
         public LegendsTool Tool { get; private set; }
         /// <summary>Case visée par le pouvoir armé (Bouclier, Gel, Invocation), Square.None tant qu'elle n'est pas choisie.</summary>
         public int ArmedSquare { get; private set; } = Square.None;
-        public bool IsTargeting => IsTargetedTool(Tool) && ArmedSquare == Square.None;
+        public bool IsTargeting => IsTargetedTool(Tool) && ArmedSquare == Square.None && PendingSquare == Square.None;
+        /// <summary>Cible touchée en attente de confirmation (le coût n'est engagé qu'après « Poser »).</summary>
+        public int PendingSquare { get; private set; } = Square.None;
+        public bool IsConfirming => PendingSquare != Square.None;
         public event Action Changed;
 
         public LegendsInteraction(LegendsController match, ILegendsBoard board, SoundBank sfx, Camera camera,
@@ -91,12 +94,14 @@ namespace KevChess.Game.Legends
             {
                 Tool = LegendsTool.None;
                 ArmedSquare = Square.None;
+                PendingSquare = Square.None;
                 board.ClearSelection();
                 Changed?.Invoke();
                 return;
             }
             Tool = tool;
             ArmedSquare = Square.None;
+            PendingSquare = Square.None;
             sfx.Play(Sfx.Select, 0.8f);
             Haptics.Select();
             if (IsTargetedTool(tool)) board.ShowPowerTargets(match.Game.PowerTargets(PowerOf(tool)), tool);
@@ -107,11 +112,29 @@ namespace KevChess.Game.Legends
         public void Reset()
         {
             ClearSelection();
-            if (Tool == LegendsTool.None && ArmedSquare == Square.None) return;
+            if (Tool == LegendsTool.None && ArmedSquare == Square.None && PendingSquare == Square.None) return;
             Tool = LegendsTool.None;
             ArmedSquare = Square.None;
+            PendingSquare = Square.None;
+            board.ClearSelection();
             Changed?.Invoke();
         }
+
+        /// <summary>Confirme le pouvoir visé : il est armé, le joueur joue ensuite son coup.</summary>
+        public void ConfirmPower()
+        {
+            if (PendingSquare == Square.None) return;
+            ArmedSquare = PendingSquare;
+            PendingSquare = Square.None;
+            board.ClearSelection();
+            board.ShowArmedPower(Tool, ArmedSquare);
+            sfx.Play(Sfx.Select);
+            Haptics.Select();
+            Changed?.Invoke();
+        }
+
+        /// <summary>Annule le pouvoir en attente de confirmation : rien n'est dépensé.</summary>
+        public void CancelPower() => Reset();
 
         // ---------------------------------------------------------------- glisser-déposer
 
@@ -119,7 +142,7 @@ namespace KevChess.Game.Legends
         {
             dragFrom = Square.None;
             dragStarted = false;
-            if (awaitingPromotion || blocked() || !match.CanHumanAct || IsTargeting) return false;
+            if (awaitingPromotion || blocked() || !match.CanHumanAct || IsTargeting || IsConfirming) return false;
             if (!board.TryPick(camera.ScreenPointToRay(screenPos), out int ps, out int bs)) return false;
             int sq = ps != Square.None ? ps : bs;
             if (sq == Square.None || !Piece.IsColor(match.Game.Position[sq], match.Game.SideToMove)) return false;
@@ -162,7 +185,7 @@ namespace KevChess.Game.Legends
 
         public bool OnTap(Vector2 screenPos)
         {
-            if (awaitingPromotion || blocked()) return true;
+            if (awaitingPromotion || blocked() || IsConfirming) return true;
             if (!board.TryPick(camera.ScreenPointToRay(screenPos), out int ps, out int bs))
             {
                 ClearSelection();
@@ -173,22 +196,7 @@ namespace KevChess.Game.Legends
 
             if (IsTargeting)
             {
-                var power = PowerOf(Tool);
-                foreach (int candidate in new[] { ps, bs })
-                {
-                    if (candidate == Square.None) continue;
-                    foreach (int t in game.PowerTargets(power))
-                    {
-                        if (t != candidate) continue;
-                        ArmedSquare = t;
-                        board.ShowArmedPower(Tool, t);
-                        sfx.Play(Sfx.Select);
-                        Haptics.Select();
-                        Changed?.Invoke();
-                        return true;
-                    }
-                }
-                Illegal();
+                if (!TargetPower(ps) && !TargetPower(bs)) Illegal();
                 return true;
             }
 
@@ -204,6 +212,23 @@ namespace KevChess.Game.Legends
             if (selected != Square.None) Illegal();
             ClearSelection();
             return true;
+        }
+
+        /// <summary>Choisit la cible du pouvoir en cours (toucher, ou recette automatique). Faux si la case n'est pas une cible.</summary>
+        public bool TargetPower(int square)
+        {
+            if (!IsTargeting || square == Square.None) return false;
+            foreach (int t in match.Game.PowerTargets(PowerOf(Tool)))
+            {
+                if (t != square) continue;
+                PendingSquare = t;
+                board.ShowArmedPower(Tool, t);
+                sfx.Play(Sfx.Select);
+                Haptics.Select();
+                Changed?.Invoke();
+                return true;
+            }
+            return false;
         }
 
         bool Matches(FantasyAction a)
@@ -259,6 +284,7 @@ namespace KevChess.Game.Legends
         {
             Tool = LegendsTool.None;
             ArmedSquare = Square.None;
+            PendingSquare = Square.None;
             Changed?.Invoke();
             if (!match.TryHumanAction(a)) Illegal();
         }

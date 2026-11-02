@@ -522,7 +522,8 @@ namespace KevChess.Game.Legends
             bool portrait = Screen.height > Screen.width;
             float dist = portrait ? 5.2f : 4.0f;
             Vector3 targetPos = center + side * dist + (savedPos - center).normalized * 0.8f + Vector3.up * 2.4f;
-            Quaternion targetRot = Quaternion.LookRotation(center + Vector3.up * 0.55f - targetPos);
+            // On vise sous les personnages : ils apparaissent dans la moitié haute, au-dessus des commandes.
+            Quaternion targetRot = Quaternion.LookRotation(center + Vector3.up * (portrait ? 0.05f : 0.35f) - targetPos);
 
             Vector3 startPos = t.position;
             Quaternion startRot = t.rotation;

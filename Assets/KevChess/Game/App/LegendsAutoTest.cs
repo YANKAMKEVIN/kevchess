@@ -76,6 +76,16 @@ namespace KevChess.Game.App
             // Bouclier blanc puis Gel noir.
             match.Game.Position.SetEnergy(PieceColor.White, 6);
             match.RefreshAfterSetup();
+            // Parcours de l'interface : outil Bouclier, cible, confirmation du coût.
+            legends.Interaction.ToggleTool(LegendsTool.Shield);
+            yield return new WaitForSeconds(0.4f);
+            yield return Capture("bouclier_cible");
+            Check(legends.Interaction.TargetPower(Sq("d5")), "cible du Bouclier acceptée");
+            yield return new WaitForSeconds(0.4f);
+            yield return Capture("bouclier_confirmation");
+            legends.Interaction.ConfirmPower();
+            Check(legends.Interaction.ArmedSquare == Sq("d5"), "Bouclier armé après confirmation");
+            yield return new WaitForSeconds(0.3f);
             yield return Play(a => a.Power == PowerKind.Shield && a.PowerSquare == Sq("d5") && a.From == Sq("g1") && a.To == Sq("f3"), "bouclier d5 + Cf3");
             yield return Capture("bouclier");
             match.Game.Position.SetEnergy(PieceColor.Black, 6);

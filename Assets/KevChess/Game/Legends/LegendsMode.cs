@@ -27,6 +27,7 @@ namespace KevChess.Game.Legends
         public bool Active { get; private set; }
         public LegendsController Controller => match;
         public LegendsHud Hud => hud;
+        public LegendsInteraction Interaction => interaction;
 
         public void Init(Camera camera, OrbitCamera orbitCamera, SoundBank sounds, Action exitToClassic)
         {
@@ -48,7 +49,7 @@ namespace KevChess.Game.Legends
             hud = hudGo.AddComponent<LegendsHud>();
             interaction = new LegendsInteraction(match, board, sfx, mainCamera, () => hud.IsBlockingOverlayOpen,
                 (from, to, options) => hud.AskPromotion(from, to, options));
-            hud.Build(match, interaction, orbit, sfx, Exit, board.ShowHint);
+            hud.Build(match, interaction, board, orbit, sfx, Exit, board.ShowHint);
 
             match.ActionStarted += _ => interaction.ClearSelection();
             match.ActionLanded += OnLanded;
@@ -56,10 +57,23 @@ namespace KevChess.Game.Legends
         }
 
         /// <summary>Entre dans le mode : reprend la partie sauvegardée s'il y en a une, sinon montre l'écran de réglages.</summary>
+        // Réglages de la caméra du mode classique, restaurés en sortant.
+        Rect savedPortraitFrame, savedLandscapeFrame;
+        float savedPortraitPitch, savedPitch;
+
         public void Enter()
         {
             gameObject.SetActive(true);
             Active = true;
+            savedPortraitFrame = orbit.PortraitFrame;
+            savedLandscapeFrame = orbit.LandscapeFrame;
+            savedPortraitPitch = orbit.PortraitPitch;
+            savedPitch = orbit.DefaultPitch;
+            // Vue 3D plus haute et plus serrée : lisibilité tactique sans perdre le relief.
+            orbit.PortraitPitch = 66f;
+            orbit.DefaultPitch = 58f;
+            orbit.IncludeTrays = false;
+            hud.ApplyBoardFrame(force: true);
             if (match.Game == null && !match.ResumeSaved())
                 match.StartNew(new MatchSettings { Mode = MatchMode.VersusAI });
             orbit.SnapToView(match.Settings.Mode == MatchMode.LocalTwoPlayers ? match.Game.SideToMove : match.ViewSide);
@@ -72,6 +86,11 @@ namespace KevChess.Game.Legends
             match.Suspend();
             interaction.Reset();
             Active = false;
+            orbit.PortraitFrame = savedPortraitFrame;
+            orbit.LandscapeFrame = savedLandscapeFrame;
+            orbit.PortraitPitch = savedPortraitPitch;
+            orbit.DefaultPitch = savedPitch;
+            orbit.IncludeTrays = true;
             gameObject.SetActive(false);
             Time.timeScale = 1f;
             onExit?.Invoke();

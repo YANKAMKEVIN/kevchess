@@ -114,7 +114,12 @@ namespace KevChess.Game.CameraRig
         /// </summary>
         public bool TraysOnXSides => IsPortrait == ((trayQuadrant & 1) == 1);
 
-        Vector3[] CurrentTrayPoints => IsPortrait
+        /// <summary>Faux : le cadrage ignore les rangées de pièces prises (mode Légendes, qui n'en affiche pas).</summary>
+        public bool IncludeTrays = true;
+
+        static readonly Vector3[] NoTrays = new Vector3[0];
+
+        Vector3[] CurrentTrayPoints => !IncludeTrays ? NoTrays : IsPortrait
             ? (TraysOnXSides ? PortraitXTrayPoints : PortraitZTrayPoints)
             : (TraysOnXSides ? XTrayPoints : ZTrayPoints);
 
@@ -135,6 +140,9 @@ namespace KevChess.Game.CameraRig
             zoomFactor = 1f;
             Refit();
         }
+
+        /// <summary>Recalcule le cadrage après un changement de zone libre (PortraitFrame / LandscapeFrame).</summary>
+        public void RefitNow() => Refit();
 
         /// <summary>Cadrage exact pour l'orientation visée, multiplié par le zoom de l'utilisateur.</summary>
         void Refit()

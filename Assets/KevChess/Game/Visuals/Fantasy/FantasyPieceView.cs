@@ -103,6 +103,13 @@ namespace KevChess.Game.Visuals.Fantasy
             ReleaseMaterials();
             _body = new Material(NeonMaterials.PieceBody(isWhite));
             _accent = new Material(NeonMaterials.PieceAccent(isWhite));
+            if (!isWhite)
+            {
+                // Camp magenta : verre moins sombre, pour que la silhouette ne soit pas dessinée par la seule lueur.
+                var b = _body.GetColor(NeonMaterials.BaseColorProperty);
+                _body.SetColor(NeonMaterials.BaseColorProperty, Color.Lerp(b, new Color(0.62f, 0.42f, 0.78f, b.a), 0.45f));
+                _body.SetColor(NeonMaterials.EmissionColorProperty, _body.GetColor(NeonMaterials.EmissionColorProperty) * 1.6f + new Color(0.05f, 0.02f, 0.07f));
+            }
             _bodyBase = _body.GetColor(NeonMaterials.BaseColorProperty);
             _bodyEmission = _body.GetColor(NeonMaterials.EmissionColorProperty);
             _accentEmission = _accent.GetColor(NeonMaterials.EmissionColorProperty);
@@ -324,7 +331,7 @@ namespace KevChess.Game.Visuals.Fantasy
             go.transform.SetParent(transform, false);
             go.AddComponent<MeshFilter>().sharedMesh = FantasyPieceFactory.IceShell();
             var r = go.AddComponent<MeshRenderer>();
-            _iceMat = NeonMaterials.CreateLitTransparent("KevChess_Ice", new Color(0.55f, 0.82f, 1f, 0.30f), 0.1f, 0.97f, new Color(0.06f, 0.16f, 0.28f));
+            _iceMat = NeonMaterials.CreateLitTransparent("KevChess_Ice", new Color(0.62f, 0.88f, 1f, 0.42f), 0.1f, 0.97f, new Color(0.16f, 0.40f, 0.62f));
             r.sharedMaterial = _iceMat;
             r.shadowCastingMode = ShadowCastingMode.Off;
             r.lightProbeUsage = LightProbeUsage.Off;
@@ -793,8 +800,8 @@ namespace KevChess.Game.Visuals.Fantasy
                     _shield.localRotation = Quaternion.Euler(0f, Time.time * 12f, 0f);
                     Color g = GlowColor;
                     float shimmer = 0.5f + 0.5f * Mathf.Sin(Time.time * 2.6f);
-                    _shieldFill.SetColor(NeonMaterials.BaseColorProperty, g * ((0.10f + 0.06f * shimmer + 0.35f * _shieldPulse) * _shieldWeight));
-                    _shieldEdge.SetColor(NeonMaterials.BaseColorProperty, Color.Lerp(g, Color.white, 0.2f) * ((1.1f + 0.4f * shimmer + 3f * _shieldPulse) * _shieldWeight));
+                    _shieldFill.SetColor(NeonMaterials.BaseColorProperty, g * ((0.05f + 0.03f * shimmer + 0.35f * _shieldPulse) * _shieldWeight));
+                    _shieldEdge.SetColor(NeonMaterials.BaseColorProperty, Color.Lerp(g, Color.white, 0.2f) * ((0.5f + 0.2f * shimmer + 3f * _shieldPulse) * _shieldWeight));
                 }
             }
             if (_ice != null)
