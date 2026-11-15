@@ -60,11 +60,50 @@ namespace KevChess.Core
         public static Move Parse(Position pos, string text)
         {
             if (string.IsNullOrWhiteSpace(text)) return Move.Null;
+            // Une UCI (« e2e4 », « e7e8q ») ne peut pas être une SAN : chemin direct, sans calculer la SAN de chaque coup.
+            if (IsUci(text.Trim())) return ParseUci(pos, text);
             string wanted = Normalize(text);
             List<Move> legal = MoveGenerator.Legal(pos);
             foreach (var m in legal)
                 if (Normalize(ToSan(pos, m)) == wanted || m.ToUci() == text.Trim()) return m;
             return Move.Null;
+        }
+
+        /// <summary>
+        /// Retrouve le coup légal correspondant à une UCI (« e2e4 », roque « e1g1 », promotion « e7e8q »).
+        /// Ne génère que les coups légaux, sans calcul de SAN. Renvoie Move.Null si le texte est invalide ou le coup illégal.
+        /// </summary>
+        public static Move ParseUci(Position pos, string uci)
+        {
+            if (uci == null) return Move.Null;
+            uci = uci.Trim();
+            if (!IsUci(uci)) return Move.Null;
+            int from = Square.Make(uci[0] - 'a', uci[1] - '1');
+            int to = Square.Make(uci[2] - 'a', uci[3] - '1');
+            PieceType promotion = uci.Length == 5 ? PromotionOf(uci[4]) : PieceType.None;
+            foreach (var m in MoveGenerator.Legal(pos))
+                if (m.SameAs(from, to, promotion)) return m;
+            return Move.Null;
+        }
+
+        static bool IsUci(string s)
+        {
+            if (s.Length != 4 && s.Length != 5) return false;
+            if (s[0] < 'a' || s[0] > 'h' || s[1] < '1' || s[1] > '8') return false;
+            if (s[2] < 'a' || s[2] > 'h' || s[3] < '1' || s[3] > '8') return false;
+            return s.Length == 4 || PromotionOf(s[4]) != PieceType.None;
+        }
+
+        static PieceType PromotionOf(char c)
+        {
+            switch (c)
+            {
+                case 'q': return PieceType.Queen;
+                case 'r': return PieceType.Rook;
+                case 'b': return PieceType.Bishop;
+                case 'n': return PieceType.Knight;
+                default: return PieceType.None;
+            }
         }
 
         /// <summary>
