@@ -112,7 +112,7 @@ namespace KevChess.Core
 
         /// <summary>Prochain coup attendu du joueur (pour un indice), Move.Null si résolu.</summary>
         public Move ExpectedMove =>
-            IsSolved || step >= Puzzle.SolutionUci.Length ? Move.Null : Notation.Parse(Game.Position, Puzzle.SolutionUci[step]);
+            IsSolved || step >= Puzzle.SolutionUci.Length ? Move.Null : Notation.ParseUci(Game.Position, Puzzle.SolutionUci[step]);
 
         /// <summary>
         /// Propose un coup du joueur. Correct : il est joué, ainsi que la réponse adverse (renvoyée dans reply).
@@ -146,7 +146,7 @@ namespace KevChess.Core
                 return PuzzleMoveResult.Solved;
             }
 
-            var answer = Notation.Parse(Game.Position, Puzzle.SolutionUci[step]);
+            var answer = Notation.ParseUci(Game.Position, Puzzle.SolutionUci[step]);
             if (!answer.IsNull && Game.TryMakeMove(answer))
             {
                 reply = answer;
