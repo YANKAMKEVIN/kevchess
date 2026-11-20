@@ -272,7 +272,7 @@ namespace KevChess.Game.App
             Press("Menu/Card/Settings");
             yield return new WaitForSeconds(0.5f);
             yield return Capture("reglages");
-            Press("Settings/Card/Theme");
+            Press("Settings/Card/Themes/Theme" + (themeBefore + 1) % VisualTheme.Names.Length);
             yield return new WaitForSeconds(0.5f);
             Check(VisualTheme.Current == (themeBefore + 1) % VisualTheme.Names.Length, "thème changé : " + VisualTheme.Names[VisualTheme.Current]);
             yield return Capture("reglages_theme");

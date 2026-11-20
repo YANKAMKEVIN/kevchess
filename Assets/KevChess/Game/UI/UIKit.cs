@@ -194,6 +194,62 @@ namespace KevChess.Game.UI
             return btn;
         }
 
+        /// <summary>Ligne de réglage : libellé à gauche, interrupteur (piste et pastille) à droite. Toucher la ligne bascule.</summary>
+        public static Button SwitchRow(string name, Transform parent, string title, Action onClick)
+        {
+            var b = Row(name, parent, title, onClick);
+            var track = Panel("Track", b.transform, new Color(0.08f, 0.10f, 0.20f, 1f), true, TextDim);
+            track.raycastTarget = false;
+            Anchor(track.rectTransform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-24, 0), new Vector2(116, 56));
+            var knob = Panel("Knob", track.transform, TextDim, false);
+            knob.raycastTarget = false;
+            Anchor(knob.rectTransform, new Vector2(0f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(28, 0), new Vector2(44, 44));
+            return b;
+        }
+
+        /// <summary>Met l'interrupteur d'une SwitchRow à oui (pastille à droite, piste allumée) ou non.</summary>
+        public static void SetSwitch(Button row, bool on, Color accent)
+        {
+            var track = row.transform.Find("Track");
+            if (track == null) return;
+            track.GetComponent<Image>().color = on ? accent * new Color(0.55f, 0.55f, 0.55f, 1f) : new Color(0.08f, 0.10f, 0.20f, 1f);
+            var outline = track.Find("Outline");
+            if (outline != null) outline.GetComponent<Image>().color = (on ? accent : TextDim) * new Color(1, 1, 1, 0.55f);
+            var knob = (RectTransform)track.Find("Knob");
+            knob.GetComponent<Image>().color = on ? Text : TextDim;
+            knob.anchorMin = knob.anchorMax = new Vector2(on ? 1f : 0f, 0.5f);
+            knob.anchoredPosition = new Vector2(on ? -28f : 28f, 0f);
+        }
+
+        /// <summary>Ligne de réglage à valeur : libellé à gauche, valeur en couleur d'accent à droite. Toucher change la valeur.</summary>
+        public static Button ValueRow(string name, Transform parent, string title, Action onClick)
+        {
+            var b = Row(name, parent, title, onClick);
+            Stretch(b.transform.Find("Label").GetComponent<RectTransform>(), 28, 4, 460, 4);
+            var value = Label("Value", b.transform, "", 32, Cyan, TextAnchor.MiddleRight, FontStyle.Bold);
+            Anchor(value.rectTransform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-28, 0), new Vector2(420, 80));
+            value.resizeTextForBestFit = true;
+            value.resizeTextMinSize = 18;
+            value.resizeTextMaxSize = 32;
+            return b;
+        }
+
+        public static void SetRowValue(Button row, string value)
+        {
+            var t = row.transform.Find("Value");
+            if (t != null) t.GetComponent<Text>().text = value;
+        }
+
+        static Button Row(string name, Transform parent, string title, Action onClick)
+        {
+            var b = Button(name, parent, title, onClick, TextDim, 34);
+            var label = b.transform.Find("Label").GetComponent<Text>();
+            label.alignment = TextAnchor.MiddleLeft;
+            label.fontStyle = FontStyle.Normal;
+            Stretch(label.rectTransform, 28, 4, 200, 4);
+            return b;
+        }
+
         public static void SetButtonText(Button b, string text)
         {
             var t = b.GetComponentInChildren<Text>();
