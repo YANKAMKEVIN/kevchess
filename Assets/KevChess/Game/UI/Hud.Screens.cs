@@ -34,6 +34,9 @@ namespace KevChess.Game.UI
         Text puzzleProgress;
         Text[] puzzleMarks;
         ScrollRect puzzleScroll;
+        Button puzzleContinue;
+        Text[] puzzleSectionLabels;
+        RectTransform[] puzzleSectionFills;
 
         // Actions de partie.
         Button actionReview, actionDraw, actionCopy, actionAnalyze, actionResign;
@@ -298,26 +301,59 @@ namespace KevChess.Game.UI
             puzzleProgress = UIKit.Label("Progress", card, "", 32, UIKit.TextDim);
             UIKit.Size(puzzleProgress, 48);
 
+            // Reprise directe au premier puzzle non résolu.
+            puzzleContinue = UIKit.Button("Continue", card, "", () =>
+            {
+                sfx.Play(Sfx.Click);
+                int next = PuzzleGroups.FirstUnsolved(PuzzleSet.All, GamePrefs.IsPuzzleSolved);
+                if (next >= 0) StartPuzzle(next);
+            }, UIKit.Magenta);
+            UIKit.Size(puzzleContinue, 104);
+
             var content = UIKit.ScrollList("List", card, 10, out puzzleScroll);
-            var le = UIKit.Size(puzzleScroll, 1100);
+            var le = UIKit.Size(puzzleScroll, 1000);
             le.flexibleHeight = 1;
 
+            // Une section par difficulté : titre, avancement et barre, puis ses puzzles.
             var puzzles = PuzzleSet.All;
             puzzleMarks = new Text[puzzles.Count];
-            for (int i = 0; i < puzzles.Count; i++)
+            var sections = PuzzleGroups.Build(puzzles, GamePrefs.IsPuzzleSolved);
+            puzzleSectionLabels = new Text[sections.Count];
+            puzzleSectionFills = new RectTransform[sections.Count];
+            for (int s = 0; s < sections.Count; s++)
             {
-                int idx = i;
-                var row = UIKit.Button("Puzzle" + i, content, (i + 1) + ". " + puzzles[i].Title, () =>
+                var section = sections[s];
+                var accent = section.MateIn == 1 ? UIKit.Cyan : UIKit.Magenta;
+                var head = UIKit.Rect("Section" + section.MateIn, content);
+                UIKit.Size(head.gameObject.AddComponent<LayoutElement>(), 96);
+                var title = UIKit.Label("Title", head, section.Title, 40, accent, TextAnchor.UpperLeft, FontStyle.Bold);
+                UIKit.Stretch(title.rectTransform, 12, 36, 12, 6);
+                puzzleSectionLabels[s] = UIKit.Label("Count", head, "", 30, UIKit.TextDim, TextAnchor.UpperRight);
+                UIKit.Stretch(puzzleSectionLabels[s].rectTransform, 12, 36, 16, 10);
+                var fill = UIKit.ProgressBar("Bar", head, accent);
+                var bar = (RectTransform)fill.parent;
+                bar.anchorMin = new Vector2(0f, 0f);
+                bar.anchorMax = new Vector2(1f, 0f);
+                bar.pivot = new Vector2(0.5f, 0f);
+                bar.offsetMin = new Vector2(12, 4);
+                bar.offsetMax = new Vector2(-12, 30);
+                puzzleSectionFills[s] = fill;
+
+                foreach (int i in section.Indices)
                 {
-                    sfx.Play(Sfx.Click);
-                    StartPuzzle(idx);
-                }, puzzles[i].MateIn == 1 ? UIKit.Cyan : UIKit.Magenta, 36);
-                UIKit.Size(row, 92);
-                var label = row.GetComponentInChildren<Text>();
-                label.alignment = TextAnchor.MiddleLeft;
-                UIKit.Stretch(label.rectTransform, 28, 4, 250, 4);
-                puzzleMarks[i] = UIKit.Label("Mate", row.transform, "", 30, UIKit.TextDim, TextAnchor.MiddleRight);
-                UIKit.Anchor(puzzleMarks[i].rectTransform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-24, 0), new Vector2(240, 80));
+                    int idx = i;
+                    var row = UIKit.Button("Puzzle" + i, content, (i + 1) + ". " + puzzles[i].Title, () =>
+                    {
+                        sfx.Play(Sfx.Click);
+                        StartPuzzle(idx);
+                    }, accent, 36);
+                    UIKit.Size(row, 92);
+                    var label = row.GetComponentInChildren<Text>();
+                    label.alignment = TextAnchor.MiddleLeft;
+                    UIKit.Stretch(label.rectTransform, 28, 4, 120, 4);
+                    puzzleMarks[i] = UIKit.Label("Mark", row.transform, "", 34, UIKit.Cyan, TextAnchor.MiddleRight, FontStyle.Bold);
+                    UIKit.Anchor(puzzleMarks[i].rectTransform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-28, 0), new Vector2(100, 80));
+                }
             }
 
             var back = UIKit.Button("Back", card, "Retour", () =>
@@ -333,12 +369,17 @@ namespace KevChess.Game.UI
         {
             var puzzles = PuzzleSet.All;
             for (int i = 0; i < puzzles.Count; i++)
+                puzzleMarks[i].text = GamePrefs.IsPuzzleSolved(puzzles[i].Id) ? "✓" : "";
+            var sections = PuzzleGroups.Build(puzzles, GamePrefs.IsPuzzleSolved);
+            for (int s = 0; s < sections.Count && s < puzzleSectionLabels.Length; s++)
             {
-                bool done = GamePrefs.IsPuzzleSolved(puzzles[i].Id);
-                puzzleMarks[i].text = "Mat en " + puzzles[i].MateIn + (done ? "  ✓" : "");
-                puzzleMarks[i].color = done ? UIKit.Cyan : UIKit.TextDim;
+                puzzleSectionLabels[s].text = sections[s].Progress;
+                puzzleSectionFills[s].anchorMax = new Vector2(Mathf.Max(0.02f, sections[s].Fraction), 1f);
             }
             puzzleProgress.text = GamePrefs.SolvedCount + " / " + puzzles.Count + " résolus";
+            int next = PuzzleGroups.FirstUnsolved(puzzles, GamePrefs.IsPuzzleSolved);
+            puzzleContinue.gameObject.SetActive(next >= 0);
+            if (next >= 0) UIKit.SetButtonText(puzzleContinue, PuzzleGroups.ContinueLabel(next));
             Show(menuOverlay, false);
             Show(puzzlesOverlay, true);
         }
