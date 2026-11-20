@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using KevChess.Core;
+using KevChess.Core.Ux;
 using KevChess.Game.Audio;
 using KevChess.Game.Match;
 using KevChess.Game.Visuals;
@@ -22,14 +23,20 @@ namespace KevChess.Game.UI
         Button localFlipButton;
 
         // Réglages.
-        Button soundButton, hapticsButton, themeButton, contrastButton, notationButton, animButton, musicButton, flipButton;
+        Button soundButton, hapticsButton, contrastButton, notationButton, animButton, musicButton, flipButton;
+        Button[] themeButtons;
         Text volumeLabel;
+        VolumeSlider volumeSlider;
+        Coroutine peekRoutine;
         AmbientMusic music;
 
         // Puzzles.
         Text puzzleProgress;
         Text[] puzzleMarks;
         ScrollRect puzzleScroll;
+        Button puzzleContinue;
+        Text[] puzzleSectionLabels;
+        RectTransform[] puzzleSectionFills;
 
         // Actions de partie.
         Button actionReview, actionDraw, actionCopy, actionAnalyze, actionResign;
@@ -43,7 +50,7 @@ namespace KevChess.Game.UI
 
         bool IsScreenOverlayOpen =>
             localOverlay.activeSelf || settingsOverlay.activeSelf || puzzlesOverlay.activeSelf || actionsOverlay.activeSelf ||
-            analysisOverlay.activeSelf;
+            analysisOverlay.activeSelf || moveListOverlay.activeSelf;
 
         /// <summary>Musique d'ambiance pilotée par l'écran Réglages (créée par KevChessApp).</summary>
         public void SetMusic(AmbientMusic ambient) => music = ambient;
@@ -51,6 +58,7 @@ namespace KevChess.Game.UI
         /// <summary>Retour Android sur un écran secondaire ; vrai s'il a été traité.</summary>
         bool HandleBackScreens()
         {
+            if (moveListOverlay.activeSelf) { Show(moveListOverlay, false); return true; }
             if (actionsOverlay.activeSelf) { Show(actionsOverlay, false); return true; }
             if (analysisOverlay.activeSelf) { CloseAnalysis(); return true; }
             if (settingsOverlay.activeSelf) { Show(settingsOverlay, false); ShowMenu(true); return true; }
@@ -106,6 +114,11 @@ namespace KevChess.Game.UI
         void StartLocalMatch()
         {
             sfx.Play(Sfx.Click);
+            ConfirmReplace(StartLocalMatchNow);
+        }
+
+        void StartLocalMatchNow()
+        {
             GamePrefs.SetClockPreset(false, localClockChoice);
             var settings = new MatchSettings { Mode = MatchMode.LocalTwoPlayers };
             settings.Clock = TimeControl.Presets[localClockChoice];
@@ -119,51 +132,138 @@ namespace KevChess.Game.UI
         void BuildSettings()
         {
             settingsOverlay = Overlay("Settings", out var card, 900, 1300, UIKit.Cyan);
-            UIKit.VStack(card, 14, 48);
+            UIKit.VStack(card, 12, 44);
             FitHeight(card);
-            UIKit.Size(UIKit.Label("Title", card, "Réglages", 72, UIKit.Cyan, TextAnchor.MiddleCenter, FontStyle.Bold), 100);
+            UIKit.Size(UIKit.Label("Title", card, "Réglages", 72, UIKit.Cyan, TextAnchor.MiddleCenter, FontStyle.Bold), 96);
 
-            soundButton = SettingButton(card, "Sound", () => sfx.Muted = !sfx.Muted);
-            hapticsButton = SettingButton(card, "Haptics", () => { Haptics.Enabled = !Haptics.Enabled; Haptics.Select(); });
-            themeButton = SettingButton(card, "Theme", () => GamePrefs.Theme = (GamePrefs.Theme + 1) % VisualTheme.Names.Length);
-            contrastButton = SettingButton(card, "Contrast", () => GamePrefs.HighContrast = !GamePrefs.HighContrast);
-            notationButton = SettingButton(card, "Notation", () => { GamePrefs.FrenchNotation = !GamePrefs.FrenchNotation; Refresh(); });
-            animButton = SettingButton(card, "Animations", () => GamePrefs.AnimationIndex = (GamePrefs.AnimationIndex + 1) % GamePrefs.AnimationNames.Length);
-            musicButton = SettingButton(card, "Music", () => { if (music != null) music.Enabled = !music.Enabled; });
+            // Oui / non : interrupteurs.
+            soundButton = SwitchSetting(card, "Sound", "Son", () => sfx.Muted = !sfx.Muted);
+            hapticsButton = SwitchSetting(card, "Haptics", "Vibrations", () => { Haptics.Enabled = !Haptics.Enabled; Haptics.Select(); });
+            musicButton = SwitchSetting(card, "Music", "Musique d'ambiance", () => { if (music != null) music.Enabled = !music.Enabled; });
 
+            // Volume de la musique : curseur.
             var volume = UIKit.Rect("Volume", card);
-            var h = UIKit.HStack(volume, 14);
-            h.childForceExpandWidth = false;
-            UIKit.Size(volume.gameObject.AddComponent<LayoutElement>(), 92);
-            UIKit.Size(UIKit.Button("Down", volume, "−", () => ChangeVolume(-0.1f), null, 48), -1, 150);
-            volumeLabel = UIKit.Label("Value", volume, "", 36, UIKit.Text);
-            UIKit.Size(volumeLabel, -1, 300, 1);
-            UIKit.Size(UIKit.Button("Up", volume, "+", () => ChangeVolume(0.1f), null, 48), -1, 150);
+            UIKit.Size(volume.gameObject.AddComponent<LayoutElement>(), 84);
+            volumeLabel = UIKit.Label("Label", volume, "", 32, UIKit.Text, TextAnchor.MiddleLeft);
+            UIKit.Anchor(volumeLabel.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(28, 0), new Vector2(250, 80));
+            volumeSlider = VolumeSlider.Create("Slider", volume, UIKit.Cyan);
+            var sr = (RectTransform)volumeSlider.transform;
+            sr.anchorMin = new Vector2(0f, 0f);
+            sr.anchorMax = new Vector2(1f, 1f);
+            sr.offsetMin = new Vector2(270, 0);
+            sr.offsetMax = new Vector2(-10, 0);
+            volumeSlider.Changed = v =>
+            {
+                if (music == null) return;
+                music.Volume = v;
+                RefreshSettings();
+            };
 
-            flipButton = SettingButton(card, "Flip", () => GamePrefs.AutoFlip = !GamePrefs.AutoFlip);
+            // Thème : quatre pastilles aux couleurs des thèmes ; la carte s'efface un instant pour montrer le plateau.
+            UIKit.Size(UIKit.Label("ThemeLabel", card, "Thème", 32, UIKit.TextDim, TextAnchor.MiddleLeft), 44);
+            var themes = UIKit.Rect("Themes", card);
+            UIKit.HStack(themes, 14);
+            UIKit.Size(themes.gameObject.AddComponent<LayoutElement>(), 112);
+            themeButtons = new Button[VisualTheme.Names.Length];
+            for (int i = 0; i < themeButtons.Length; i++)
+            {
+                int idx = i;
+                themeButtons[i] = ThemeSwatch(themes, idx, () =>
+                {
+                    sfx.Play(Sfx.Click);
+                    GamePrefs.Theme = idx;
+                    RefreshSettings();
+                    PeekBoard(settingsOverlay);
+                });
+            }
+
+            contrastButton = SwitchSetting(card, "Contrast", "Lisibilité renforcée", () => GamePrefs.HighContrast = !GamePrefs.HighContrast);
+            flipButton = SwitchSetting(card, "Flip", "Partie à deux : la caméra suit le camp au trait", () => GamePrefs.AutoFlip = !GamePrefs.AutoFlip);
+
+            // Choix à plusieurs valeurs : valeur affichée à droite, toucher pour changer.
+            notationButton = ValueSetting(card, "Notation", "Notation", () => { GamePrefs.FrenchNotation = !GamePrefs.FrenchNotation; Refresh(); });
+            animButton = ValueSetting(card, "Animations", "Animations", () => GamePrefs.AnimationIndex = (GamePrefs.AnimationIndex + 1) % GamePrefs.AnimationNames.Length);
+
+            var tipsAgain = UIKit.Button("TipsAgain", card, "Revoir les gestes du plateau", () =>
+            {
+                sfx.Play(Sfx.Click);
+                RestartTips();
+                Show(settingsOverlay, false);
+                // Les bulles s'affichent sur la partie en cours ; sans partie, on revient au menu.
+                if (match.Game == null || match.Game.IsOver) ShowMenu(true);
+            }, UIKit.Cyan, 34);
+            UIKit.Size(tipsAgain, 88);
 
             var back = UIKit.Button("Back", card, "Retour", () => { sfx.Play(Sfx.Click); Show(settingsOverlay, false); ShowMenu(true); }, UIKit.Magenta);
-            UIKit.Size(back, 108);
+            UIKit.Size(back, 104);
         }
 
-        Button SettingButton(RectTransform card, string name, Action toggle)
+        Button SwitchSetting(RectTransform card, string name, string title, Action toggle)
         {
-            var b = UIKit.Button(name, card, "", () =>
+            var b = UIKit.SwitchRow(name, card, title, () =>
             {
                 toggle();
                 sfx.Play(Sfx.Click);
                 RefreshSettings();
-            }, UIKit.TextDim, 36);
-            UIKit.Size(b, 92);
+            });
+            UIKit.Size(b, 88);
             return b;
         }
 
-        void ChangeVolume(float delta)
+        Button ValueSetting(RectTransform card, string name, string title, Action change)
         {
-            if (music == null) return;
-            music.Volume = Mathf.Round((music.Volume + delta) * 10f) / 10f;
-            sfx.Play(Sfx.Click);
-            RefreshSettings();
+            var b = UIKit.ValueRow(name, card, title, () =>
+            {
+                change();
+                sfx.Play(Sfx.Click);
+                RefreshSettings();
+            });
+            UIKit.Size(b, 88);
+            return b;
+        }
+
+        /// <summary>Pastille de thème : trois bandes (blancs, noirs, sélection) et le nom dessous.</summary>
+        Button ThemeSwatch(RectTransform row, int index, Action onClick)
+        {
+            var palette = VisualTheme.PaletteOf(index);
+            var b = UIKit.Button("Theme" + index, row, VisualTheme.Names[index], onClick, palette.Selection, 24);
+            var label = b.GetComponentInChildren<Text>();
+            label.alignment = TextAnchor.LowerCenter;
+            label.fontStyle = FontStyle.Normal;
+            UIKit.Stretch(label.rectTransform, 6, 6, 6, 4);
+            var colors = new[] { palette.WhiteGlow, palette.BlackGlow, palette.Selection };
+            for (int i = 0; i < colors.Length; i++)
+            {
+                var dot = new GameObject("Dot" + i, typeof(RectTransform)).AddComponent<Image>();
+                dot.transform.SetParent(b.transform, false);
+                dot.sprite = UIKit.Glow;
+                dot.color = colors[i];
+                dot.raycastTarget = false;
+                UIKit.Anchor(dot.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2((i - 1) * 46f, -14), new Vector2(54, 54));
+            }
+            return b;
+        }
+
+        /// <summary>Rend l'écran translucide un instant, pour voir l'effet d'un thème sur le plateau.</summary>
+        void PeekBoard(GameObject overlay)
+        {
+            if (peekRoutine != null) StopCoroutine(peekRoutine);
+            peekRoutine = StartCoroutine(Peek(overlay.GetComponent<CanvasGroup>()));
+        }
+
+        System.Collections.IEnumerator Peek(CanvasGroup group)
+        {
+            const float low = 0.28f, fadeOut = 0.15f, hold = 1.1f, fadeIn = 0.3f;
+            // Écran fermé en cours de route : il retrouve aussitôt son opacité.
+            for (float t = 0f; t < fadeOut + hold + fadeIn && group.gameObject.activeSelf; t += Time.unscaledDeltaTime)
+            {
+                group.alpha = t < fadeOut ? Mathf.Lerp(1f, low, t / fadeOut)
+                    : t < fadeOut + hold ? low
+                    : Mathf.Lerp(low, 1f, (t - fadeOut - hold) / fadeIn);
+                yield return null;
+            }
+            group.alpha = 1f;
+            peekRoutine = null;
         }
 
         void OpenSettings()
@@ -175,17 +275,20 @@ namespace KevChess.Game.UI
 
         void RefreshSettings()
         {
-            UIKit.SetButtonText(soundButton, sfx.Muted ? "Son : coupé" : "Son : activé");
-            UIKit.SetButtonText(hapticsButton, Haptics.Enabled ? "Vibrations : activées" : "Vibrations : coupées");
-            UIKit.SetButtonText(themeButton, "Thème : " + VisualTheme.Names[GamePrefs.Theme]);
-            UIKit.SetButtonText(contrastButton, "Lisibilité renforcée : " + (GamePrefs.HighContrast ? "oui" : "non"));
-            UIKit.SetButtonText(notationButton, "Notation : " + (GamePrefs.FrenchNotation ? "française (C, F, T, D, R)" : "anglaise (N, B, R, Q, K)"));
-            UIKit.SetButtonText(animButton, "Animations : " + GamePrefs.AnimationNames[GamePrefs.AnimationIndex]);
+            UIKit.SetSwitch(soundButton, !sfx.Muted, UIKit.Cyan);
+            UIKit.SetSwitch(hapticsButton, Haptics.Enabled, UIKit.Cyan);
             bool musicOn = music != null && music.Enabled;
-            UIKit.SetButtonText(musicButton, "Musique d'ambiance : " + (musicOn ? "activée" : "coupée"));
-            volumeLabel.text = "Volume : " + Mathf.RoundToInt((music != null ? music.Volume : 0f) * 100f) + " %";
+            UIKit.SetSwitch(musicButton, musicOn, UIKit.Cyan);
+            float vol = music != null ? music.Volume : 0f;
+            volumeSlider.Value = vol;
+            volumeLabel.text = "Volume " + SliderMath.Percent(vol);
             volumeLabel.color = musicOn ? UIKit.Text : UIKit.TextDim;
-            UIKit.SetButtonText(flipButton, "Partie à deux : caméra " + (GamePrefs.AutoFlip ? "qui suit le camp au trait" : "fixe"));
+            for (int i = 0; i < themeButtons.Length; i++)
+                Highlight(themeButtons[i], i == GamePrefs.Theme, VisualTheme.PaletteOf(i).Selection);
+            UIKit.SetSwitch(contrastButton, GamePrefs.HighContrast, UIKit.Cyan);
+            UIKit.SetSwitch(flipButton, GamePrefs.AutoFlip, UIKit.Cyan);
+            UIKit.SetRowValue(notationButton, GamePrefs.FrenchNotation ? "française (C, F, T, D, R)" : "anglaise (N, B, R, Q, K)");
+            UIKit.SetRowValue(animButton, GamePrefs.AnimationNames[GamePrefs.AnimationIndex]);
         }
 
         // ---------------------------------------------------------------- Puzzles
@@ -198,26 +301,59 @@ namespace KevChess.Game.UI
             puzzleProgress = UIKit.Label("Progress", card, "", 32, UIKit.TextDim);
             UIKit.Size(puzzleProgress, 48);
 
+            // Reprise directe au premier puzzle non résolu.
+            puzzleContinue = UIKit.Button("Continue", card, "", () =>
+            {
+                sfx.Play(Sfx.Click);
+                int next = PuzzleGroups.FirstUnsolved(PuzzleSet.All, GamePrefs.IsPuzzleSolved);
+                if (next >= 0) StartPuzzle(next);
+            }, UIKit.Magenta);
+            UIKit.Size(puzzleContinue, 104);
+
             var content = UIKit.ScrollList("List", card, 10, out puzzleScroll);
-            var le = UIKit.Size(puzzleScroll, 1100);
+            var le = UIKit.Size(puzzleScroll, 1000);
             le.flexibleHeight = 1;
 
+            // Une section par difficulté : titre, avancement et barre, puis ses puzzles.
             var puzzles = PuzzleSet.All;
             puzzleMarks = new Text[puzzles.Count];
-            for (int i = 0; i < puzzles.Count; i++)
+            var sections = PuzzleGroups.Build(puzzles, GamePrefs.IsPuzzleSolved);
+            puzzleSectionLabels = new Text[sections.Count];
+            puzzleSectionFills = new RectTransform[sections.Count];
+            for (int s = 0; s < sections.Count; s++)
             {
-                int idx = i;
-                var row = UIKit.Button("Puzzle" + i, content, (i + 1) + ". " + puzzles[i].Title, () =>
+                var section = sections[s];
+                var accent = section.MateIn == 1 ? UIKit.Cyan : UIKit.Magenta;
+                var head = UIKit.Rect("Section" + section.MateIn, content);
+                UIKit.Size(head.gameObject.AddComponent<LayoutElement>(), 96);
+                var title = UIKit.Label("Title", head, section.Title, 40, accent, TextAnchor.UpperLeft, FontStyle.Bold);
+                UIKit.Stretch(title.rectTransform, 12, 36, 12, 6);
+                puzzleSectionLabels[s] = UIKit.Label("Count", head, "", 30, UIKit.TextDim, TextAnchor.UpperRight);
+                UIKit.Stretch(puzzleSectionLabels[s].rectTransform, 12, 36, 16, 10);
+                var fill = UIKit.ProgressBar("Bar", head, accent);
+                var bar = (RectTransform)fill.parent;
+                bar.anchorMin = new Vector2(0f, 0f);
+                bar.anchorMax = new Vector2(1f, 0f);
+                bar.pivot = new Vector2(0.5f, 0f);
+                bar.offsetMin = new Vector2(12, 4);
+                bar.offsetMax = new Vector2(-12, 30);
+                puzzleSectionFills[s] = fill;
+
+                foreach (int i in section.Indices)
                 {
-                    sfx.Play(Sfx.Click);
-                    StartPuzzle(idx);
-                }, puzzles[i].MateIn == 1 ? UIKit.Cyan : UIKit.Magenta, 36);
-                UIKit.Size(row, 92);
-                var label = row.GetComponentInChildren<Text>();
-                label.alignment = TextAnchor.MiddleLeft;
-                UIKit.Stretch(label.rectTransform, 28, 4, 250, 4);
-                puzzleMarks[i] = UIKit.Label("Mate", row.transform, "", 30, UIKit.TextDim, TextAnchor.MiddleRight);
-                UIKit.Anchor(puzzleMarks[i].rectTransform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-24, 0), new Vector2(240, 80));
+                    int idx = i;
+                    var row = UIKit.Button("Puzzle" + i, content, (i + 1) + ". " + puzzles[i].Title, () =>
+                    {
+                        sfx.Play(Sfx.Click);
+                        StartPuzzle(idx);
+                    }, accent, 36);
+                    UIKit.Size(row, 92);
+                    var label = row.GetComponentInChildren<Text>();
+                    label.alignment = TextAnchor.MiddleLeft;
+                    UIKit.Stretch(label.rectTransform, 28, 4, 120, 4);
+                    puzzleMarks[i] = UIKit.Label("Mark", row.transform, "", 34, UIKit.Cyan, TextAnchor.MiddleRight, FontStyle.Bold);
+                    UIKit.Anchor(puzzleMarks[i].rectTransform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-28, 0), new Vector2(100, 80));
+                }
             }
 
             var back = UIKit.Button("Back", card, "Retour", () =>
@@ -233,12 +369,17 @@ namespace KevChess.Game.UI
         {
             var puzzles = PuzzleSet.All;
             for (int i = 0; i < puzzles.Count; i++)
+                puzzleMarks[i].text = GamePrefs.IsPuzzleSolved(puzzles[i].Id) ? "✓" : "";
+            var sections = PuzzleGroups.Build(puzzles, GamePrefs.IsPuzzleSolved);
+            for (int s = 0; s < sections.Count && s < puzzleSectionLabels.Length; s++)
             {
-                bool done = GamePrefs.IsPuzzleSolved(puzzles[i].Id);
-                puzzleMarks[i].text = "Mat en " + puzzles[i].MateIn + (done ? "  ✓" : "");
-                puzzleMarks[i].color = done ? UIKit.Cyan : UIKit.TextDim;
+                puzzleSectionLabels[s].text = sections[s].Progress;
+                puzzleSectionFills[s].anchorMax = new Vector2(Mathf.Max(0.02f, sections[s].Fraction), 1f);
             }
             puzzleProgress.text = GamePrefs.SolvedCount + " / " + puzzles.Count + " résolus";
+            int next = PuzzleGroups.FirstUnsolved(puzzles, GamePrefs.IsPuzzleSolved);
+            puzzleContinue.gameObject.SetActive(next >= 0);
+            if (next >= 0) UIKit.SetButtonText(puzzleContinue, PuzzleGroups.ContinueLabel(next));
             Show(menuOverlay, false);
             Show(puzzlesOverlay, true);
         }

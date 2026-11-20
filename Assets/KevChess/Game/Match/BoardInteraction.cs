@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using KevChess.Core;
+using KevChess.Core.Ux;
 using KevChess.Game.Audio;
 using KevChess.Game.UI;
 using KevChess.Game.View;
@@ -80,6 +81,7 @@ namespace KevChess.Game.Match
             {
                 sfx.Play(Sfx.Illegal, 0.6f);
                 Haptics.Illegal();
+                ExplainRefusal(from, to);
             }
         }
 
@@ -124,9 +126,20 @@ namespace KevChess.Game.Match
             {
                 sfx.Play(Sfx.Illegal, 0.6f);
                 Haptics.Illegal();
+                ExplainRefusal(selected, square);
             }
             ClearSelection();
             return true;
+        }
+
+        /// <summary>Coup refusé : dit pourquoi (échec, pièce clouée, case attaquée) et fait clignoter le roi et ses agresseurs.</summary>
+        void ExplainRefusal(int from, int to)
+        {
+            var refusal = MoveRefusal.Explain(match.Game.Position, from, to);
+            if (refusal.Reason == RefusalReason.None) return;
+            var squares = new List<int>(refusal.Attackers) { refusal.KingSquare };
+            board.FlashSquares(squares);
+            hud.Toast(refusal.Message, UIKit.Danger);
         }
 
         void Play(Move move)
@@ -173,7 +186,7 @@ namespace KevChess.Game.Match
                 awaitingPromotion = false;
                 board.ClearSelection();
                 if (type == PieceType.None || !match.TryHumanMove(from, to, type)) board.ReturnPiece(from);
-            });
+            }, to);
         }
     }
 }

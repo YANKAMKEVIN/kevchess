@@ -221,7 +221,7 @@ namespace KevChess.Game.App
             // Puzzles : liste, coup faux, indice, résolution d'un mat en 2.
             hud.ShowMenu(true);
             yield return new WaitForSeconds(0.3f);
-            Press("Menu/Card/Puzzles");
+            Press("Menu/Card/Modes/Row1/Puzzles");
             yield return new WaitForSeconds(0.6f);
             yield return Capture("puzzles_liste");
             int puzzleIndex = 0;
@@ -269,10 +269,10 @@ namespace KevChess.Game.App
             int themeBefore = VisualTheme.Current;
             hud.ShowMenu(true);
             yield return new WaitForSeconds(0.3f);
-            Press("Menu/Card/Settings");
+            Press("Menu/Card/Modes/Row2/Settings");
             yield return new WaitForSeconds(0.5f);
             yield return Capture("reglages");
-            Press("Settings/Card/Theme");
+            Press("Settings/Card/Themes/Theme" + (themeBefore + 1) % VisualTheme.Names.Length);
             yield return new WaitForSeconds(0.5f);
             Check(VisualTheme.Current == (themeBefore + 1) % VisualTheme.Names.Length, "thème changé : " + VisualTheme.Names[VisualTheme.Current]);
             yield return Capture("reglages_theme");
@@ -286,7 +286,7 @@ namespace KevChess.Game.App
             // Écran « Partie à deux » : cadence et caméra.
             hud.ShowMenu(true);
             yield return new WaitForSeconds(0.3f);
-            Press("Menu/Card/Local");
+            Press("Menu/Card/Modes/Row0/Local");
             yield return new WaitForSeconds(0.3f);
             Press("LocalSetup/Card/Clocks/Row1/Clock4");
             yield return new WaitForSeconds(0.3f);
@@ -295,7 +295,7 @@ namespace KevChess.Game.App
             yield return new WaitForSeconds(0.3f);
 
             // Contre l'IA par son écran : Noirs (l'IA ouvre), niveau Moyen, cadence 3+2.
-            Press("Menu/Card/VsAI");
+            Press("Menu/Card/Modes/Row0/VsAI");
             yield return new WaitForSeconds(0.3f);
             Press("AISetup/Card/Colors/Color1");
             Press("AISetup/Card/Levels/Level2");
@@ -303,6 +303,9 @@ namespace KevChess.Game.App
             yield return new WaitForSeconds(0.3f);
             yield return Capture("contre_ia_config");
             Press("AISetup/Card/Actions/Play");
+            yield return null;
+            // Une partie non terminée serait remplacée : on confirme.
+            if (hud.IsConfirmOpen) Press("Confirm/Card/Buttons/Yes");
             yield return new WaitForSeconds(0.25f);
             Check(match.Settings.Mode == MatchMode.VersusAI && match.Settings.ClockBase == 180 && match.Settings.ClockIncrement == 2,
                 "partie contre l'IA lancée en 3+2");

@@ -44,6 +44,9 @@ namespace KevChess.Game.Visuals
         /// <summary>Palette du thème actif.</summary>
         public static ThemePalette Palette => Palettes[_current];
 
+        /// <summary>Palette du thème <paramref name="index"/> (borné), sans l'appliquer : pastilles des Réglages.</summary>
+        public static ThemePalette PaletteOf(int index) => Palettes[Mathf.Clamp(index, 0, Palettes.Length - 1)];
+
         /// <summary>
         /// Mode lisibilité : liserés, accents et émission plus forts, coordonnées plus lumineuses.
         /// Réappliqué immédiatement.

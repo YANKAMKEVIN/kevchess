@@ -181,6 +181,15 @@ namespace KevChess.Game.View
             highlights.ShowLegalMoves(quiet, captures);
         }
 
+        /// <summary>Coup refusé : fait clignoter les cases en cause (roi menacé, pièces qui l'attaquent).</summary>
+        public void FlashSquares(IEnumerable<int> squares)
+        {
+            var cells = new List<Vector2Int>();
+            foreach (int sq in squares)
+                if (sq != Square.None) cells.Add(new Vector2Int(Square.File(sq), Square.Rank(sq)));
+            if (cells.Count > 0) highlights.Flash(cells);
+        }
+
         /// <summary>Promotion en attente : garde la pièce et la case d'arrivée marquées.</summary>
         public void ShowPendingMove(int from, int to)
         {

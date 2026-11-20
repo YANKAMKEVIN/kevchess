@@ -88,7 +88,12 @@ namespace KevChess.Game.App
             pointer.PieceDragged += p => { if (legends.Active) legends.OnDrag(p); else interaction.OnDrag(p); };
             pointer.PieceDropped += p => { if (legends.Active) legends.OnDrop(p); else interaction.OnDrop(p); };
             pointer.PieceDragCancelled += () => { if (legends.Active) legends.OnDragCancelled(); else interaction.OnDragCancelled(); };
-            pointer.Dragged += d => { if (!CameraBlocked) orbit.Orbit(d); };
+            pointer.Dragged += d =>
+            {
+                if (CameraBlocked) return;
+                orbit.Orbit(d);
+                if (!legends.Active) hud.NotifyCameraOrbited(d);
+            };
             pointer.Zoomed += f => { if (!CameraBlocked) orbit.Zoom(f); };
             // Double-tap hors plateau : recentrer (sur le plateau, les touchers servent à jouer).
             pointer.DoubleTapped += _ =>
