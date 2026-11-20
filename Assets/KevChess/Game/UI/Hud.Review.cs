@@ -118,7 +118,7 @@ namespace KevChess.Game.UI
             int total = game.Moves.Count;
             status.color = UIKit.Magenta;
             status.text = reviewPly == 0 ? "Revue · position de départ" : "Revue · " + MoveLabel(game.StartFen, reviewPly - 1, game.SanMoves[reviewPly - 1]);
-            movesLine.text = RecentMoves(game, reviewPly, 8);
+            SetMoveStrip(game, Mathf.Min(total, reviewPly + 4), reviewPly - 1, UIKit.Magenta);
             openingLine.text = reviewNotePly == reviewPly && reviewNote != null ? reviewNote : "";
             openingLine.color = reviewNotePly == reviewPly ? Orange : UIKit.TextDim;
             reviewCounter.text = reviewPly + " / " + total;

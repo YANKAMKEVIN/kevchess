@@ -1,6 +1,5 @@
 using System;
 using System.Collections;
-using System.Text;
 using KevChess.Core;
 using KevChess.Core.Ux;
 using KevChess.Game.Audio;
@@ -35,7 +34,7 @@ namespace KevChess.Game.UI
         RectTransform safeRoot;
         Rect appliedSafeArea;
 
-        Text whiteName, blackName, whiteScore, blackScore, whiteClock, blackClock, status, movesLine, openingLine;
+        Text whiteName, blackName, whiteScore, blackScore, whiteClock, blackClock, status, openingLine;
         Image whiteTurn, blackTurn;
         Button undoButton, hintButton, viewButton, moreButton, listButton, nextButton;
         GameObject hudGroup, bottomBar;
@@ -107,6 +106,7 @@ namespace KevChess.Game.UI
             BuildPuzzleList();
             BuildActions();
             BuildAnalysis();
+            BuildMoveList();
             BuildPromotion();
             BuildEndScreen();
             BuildConfirm();
@@ -138,9 +138,8 @@ namespace KevChess.Game.UI
             UIKit.Anchor(status.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -190), new Vector2(1000, 64));
             status.gameObject.AddComponent<Shadow>().effectColor = new Color(0, 0, 0, 0.8f);
 
-            movesLine = UIKit.Label("Moves", hudGroup.transform, "", 30, UIKit.TextDim);
-            UIKit.Anchor(movesLine.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -246), new Vector2(1000, 44));
-            movesLine.horizontalOverflow = HorizontalWrapMode.Overflow;
+            // Derniers coups, touchables (Hud.MoveStrip.cs).
+            BuildMoveStrip();
 
             // Nom de l'ouverture (ou titre du puzzle, note de revue), discret sous les coups.
             openingLine = UIKit.Label("Opening", hudGroup.transform, "", 27, UIKit.TextDim * new Color(1, 1, 1, 0.85f), TextAnchor.MiddleCenter, FontStyle.Italic);
@@ -309,7 +308,7 @@ namespace KevChess.Game.UI
             else if (s.Mode == MatchMode.VersusAI) status.text = s.IsHuman(game.SideToMove) ? "À vous de jouer" : "";
             else status.text = game.SideToMove == PieceColor.White ? "Aux Blancs de jouer" : "Aux Noirs de jouer";
 
-            movesLine.text = RecentMoves(game, game.Moves.Count, 8);
+            SetMoveStrip(game, game.Moves.Count, game.Moves.Count - 1, UIKit.Cyan);
             openingLine.text = puzzle ? PuzzleCaption(match.Puzzle.Puzzle) : Opening(game);
         }
 
@@ -395,24 +394,6 @@ namespace KevChess.Game.UI
                 total += Piece.ColorOf(p) == PieceColor.White ? v : -v;
             }
             return total;
-        }
-
-        /// <summary>Derniers coups jusqu'au demi-coup <paramref name="upTo"/> (exclu), dans la notation choisie.</summary>
-        static string RecentMoves(ChessGame game, int upTo, int maxPlies)
-        {
-            var san = game.SanMoves;
-            upTo = Mathf.Min(upTo, san.Count);
-            if (upTo == 0) return "";
-            int first = Mathf.Max(0, upTo - maxPlies);
-            var sb = new StringBuilder();
-            for (int i = first; i < upTo; i++)
-            {
-                MoveNumber(game.StartFen, i, out int number, out bool whiteMove);
-                if (whiteMove) sb.Append(number).Append(". ");
-                else if (i == first) sb.Append(number).Append("… ");
-                sb.Append(GamePrefs.San(san[i])).Append("  ");
-            }
-            return sb.ToString().TrimEnd();
         }
 
         /// <summary>Numéro du coup et camp du demi-coup <paramref name="ply"/> (0 = premier coup joué).</summary>

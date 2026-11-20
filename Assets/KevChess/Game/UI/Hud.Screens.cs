@@ -43,7 +43,7 @@ namespace KevChess.Game.UI
 
         bool IsScreenOverlayOpen =>
             localOverlay.activeSelf || settingsOverlay.activeSelf || puzzlesOverlay.activeSelf || actionsOverlay.activeSelf ||
-            analysisOverlay.activeSelf;
+            analysisOverlay.activeSelf || moveListOverlay.activeSelf;
 
         /// <summary>Musique d'ambiance pilotée par l'écran Réglages (créée par KevChessApp).</summary>
         public void SetMusic(AmbientMusic ambient) => music = ambient;
@@ -51,6 +51,7 @@ namespace KevChess.Game.UI
         /// <summary>Retour Android sur un écran secondaire ; vrai s'il a été traité.</summary>
         bool HandleBackScreens()
         {
+            if (moveListOverlay.activeSelf) { Show(moveListOverlay, false); return true; }
             if (actionsOverlay.activeSelf) { Show(actionsOverlay, false); return true; }
             if (analysisOverlay.activeSelf) { CloseAnalysis(); return true; }
             if (settingsOverlay.activeSelf) { Show(settingsOverlay, false); ShowMenu(true); return true; }
