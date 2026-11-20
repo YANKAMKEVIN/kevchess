@@ -55,7 +55,7 @@ namespace KevChess.Game.UI
         AILevel aiLevel = AILevel.Medium;
         int aiClockChoice;
         Button[] colorButtons, levelButtons, aiClockButtons;
-        Text aiStatsLabel;
+        Text[] levelRecords;
 
         PieceColor localViewSide = PieceColor.White;
         int lastTickSecond = -1;
@@ -502,17 +502,28 @@ namespace KevChess.Game.UI
             UIKit.Size(UIKit.Label("LevelLabel", card, "Niveau", 34, UIKit.TextDim), 48);
             var levels = UIKit.Rect("Levels", card);
             UIKit.VStack(levels, 10);
-            UIKit.Size(levels.gameObject.AddComponent<LayoutElement>(), 5 * 84 + 4 * 10);
+            UIKit.Size(levels.gameObject.AddComponent<LayoutElement>(), 5 * 108 + 4 * 10);
             levelButtons = new Button[5];
+            levelRecords = new Text[5];
             for (int i = 0; i < 5; i++)
             {
                 var level = (AILevel)i;
-                levelButtons[i] = UIKit.Button("Level" + i, levels, MatchSettings.LevelName(level), () => { sfx.Play(Sfx.Click); aiLevel = level; RefreshAISetup(); }, null, 36);
-                UIKit.Size(levelButtons[i], 84);
+                var b = UIKit.Button("Level" + i, levels, MatchSettings.LevelName(level), () => { sfx.Play(Sfx.Click); aiLevel = level; RefreshAISetup(); }, null, 36);
+                UIKit.Size(b, 108);
+                // Nom en haut à gauche, description dessous, bilan contre ce niveau à droite.
+                var name = b.GetComponentInChildren<Text>();
+                name.alignment = TextAnchor.UpperLeft;
+                UIKit.Stretch(name.rectTransform, 28, 50, 250, 10);
+                int maxMs = KevChess.AI.ChessAI.GetSettings((KevChess.AI.Difficulty)i).MaxTimeMs;
+                var blurb = UIKit.Label("Blurb", b.transform, LevelBlurb.Line(i, maxMs), 24, UIKit.TextDim, TextAnchor.LowerLeft);
+                UIKit.Stretch(blurb.rectTransform, 28, 10, 250, 54);
+                blurb.resizeTextForBestFit = true;
+                blurb.resizeTextMinSize = 16;
+                blurb.resizeTextMaxSize = 24;
+                levelRecords[i] = UIKit.Label("Record", b.transform, "", 26, UIKit.Cyan, TextAnchor.MiddleRight);
+                UIKit.Anchor(levelRecords[i].rectTransform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-24, 0), new Vector2(230, 80));
+                levelButtons[i] = b;
             }
-            // Bilan contre le niveau choisi.
-            aiStatsLabel = UIKit.Label("Stats", card, "", 30, UIKit.Cyan);
-            UIKit.Size(aiStatsLabel, 44);
 
             UIKit.Size(UIKit.Label("ClockLabel", card, "Cadence", 34, UIKit.TextDim), 48);
             aiClockButtons = BuildClockChoices(card, i => { aiClockChoice = i; RefreshAISetup(); });
@@ -561,13 +572,13 @@ namespace KevChess.Game.UI
             for (int i = 0; i < colorButtons.Length; i++) Highlight(colorButtons[i], i == aiColorChoice, UIKit.Cyan);
             for (int i = 0; i < levelButtons.Length; i++) Highlight(levelButtons[i], i == (int)aiLevel, UIKit.Magenta);
             for (int i = 0; i < aiClockButtons.Length; i++) Highlight(aiClockButtons[i], i == aiClockChoice, UIKit.Cyan);
-            var r = GamePrefs.Stats(aiLevel);
-            aiStatsLabel.text = r.Wins + r.Draws + r.Losses == 0
-                ? "Aucune partie contre ce niveau"
-                : "Bilan : " + Plural(r.Wins, "victoire") + " · " + Plural(r.Draws, "nulle") + " · " + Plural(r.Losses, "défaite");
+            for (int i = 0; i < levelRecords.Length; i++)
+            {
+                var r = GamePrefs.Stats((AILevel)i);
+                levelRecords[i].text = LevelBlurb.Record(r.Wins, r.Draws, r.Losses);
+                levelRecords[i].color = r.Wins + r.Draws + r.Losses == 0 ? UIKit.TextDim : UIKit.Cyan;
+            }
         }
-
-        static string Plural(int n, string word) => n + " " + word + (n > 1 ? "s" : "");
 
         static void Highlight(Button b, bool on, Color accent)
         {
