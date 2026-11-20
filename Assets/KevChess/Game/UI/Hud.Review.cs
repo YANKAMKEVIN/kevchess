@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using KevChess.AI;
 using KevChess.Core;
+using KevChess.Core.Ux;
 using KevChess.Game.Audio;
 using KevChess.Game.Match;
 using UnityEngine;
@@ -38,6 +39,10 @@ namespace KevChess.Game.UI
         GameAnalysis analysis;
         ChessGame analyzedGame;
         int analyzedPlies;
+        Image curveImage;
+        RectTransform curveDots;
+        Texture2D curveTexture;
+        float[] curvePoints;
 
         public bool IsReviewing => reviewing;
         public int ReviewPly => reviewPly;
@@ -180,6 +185,21 @@ namespace KevChess.Game.UI
             rl.flexibleHeight = 1;
             rl.preferredHeight = 1100;
 
+            // Courbe d'avantage coup par coup ; toucher la courbe ouvre la revue sur ce coup.
+            var curvePanel = UIKit.Panel("Curve", results, UIKit.Glass, true, UIKit.Magenta);
+            UIKit.Size(curvePanel, 220);
+            var curveRt = UIKit.Rect("Graph", curvePanel.transform);
+            UIKit.Stretch(curveRt, 14, 14, 14, 14);
+            curveImage = curveRt.gameObject.AddComponent<Image>();
+            curveImage.raycastTarget = true;
+            curveRt.gameObject.AddComponent<CurveTap>().Tapped = OnCurveTapped;
+            curveDots = UIKit.Rect("Dots", curveRt);
+            UIKit.Stretch(curveDots);
+            var whiteTag = UIKit.Label("WhiteTag", curvePanel.transform, "Blancs", 22, UIKit.Cyan, TextAnchor.UpperLeft);
+            UIKit.Stretch(whiteTag.rectTransform, 22, 150, 22, 10);
+            var blackTag = UIKit.Label("BlackTag", curvePanel.transform, "Noirs", 22, UIKit.Magenta, TextAnchor.LowerLeft);
+            UIKit.Stretch(blackTag.rectTransform, 22, 10, 22, 150);
+
             var acc = UIKit.Rect("Accuracy", results);
             UIKit.HStack(acc, 16);
             UIKit.Size(acc.gameObject.AddComponent<LayoutElement>(), 120);
@@ -201,7 +221,7 @@ namespace KevChess.Game.UI
 
             UIKit.Size(UIKit.Label("ListTitle", results, "Erreurs et gaffes (toucher pour revoir)", 30, UIKit.TextDim), 46);
             analysisList = UIKit.ScrollList("List", results, 10, out analysisScroll);
-            var ll = UIKit.Size(analysisScroll, 380);
+            var ll = UIKit.Size(analysisScroll, 300);
             ll.flexibleHeight = 1;
             analysisEmpty = UIKit.Label("Empty", analysisList, "Aucune erreur ni gaffe. Bravo !", 32, UIKit.Cyan);
             UIKit.Size(analysisEmpty, 80);
@@ -272,6 +292,7 @@ namespace KevChess.Game.UI
         {
             analysisProgressGroup.SetActive(false);
             analysisResultsGroup.SetActive(true);
+            DrawCurve();
             accuracyWhite.text = analysis.AccuracyWhite.ToString("0") + " %";
             accuracyBlack.text = analysis.AccuracyBlack.ToString("0") + " %";
             var qualities = new[] { MoveQuality.Excellent, MoveQuality.Imprecision, MoveQuality.Erreur, MoveQuality.Gaffe };
@@ -309,6 +330,64 @@ namespace KevChess.Game.UI
                 UIKit.Stretch(label.rectTransform, 24, 4, 24, 4);
             }
             analysisScroll.verticalNormalizedPosition = 1f;
+        }
+
+        /// <summary>Trace la courbe d'avantage (Core.Ux.EvalCurve) et pose un point coloré sur chaque erreur et gaffe.</summary>
+        void DrawCurve()
+        {
+            var evals = new List<int>();
+            foreach (var v in analysis.Moves) evals.Add(v.EvalAfterCp);
+            curvePoints = EvalCurve.Points(analysis.Moves.Count > 0 ? analysis.Moves[0].EvalBeforeCp : 0, evals);
+
+            const int w = 420, h = 120;
+            var codes = EvalCurve.Rasterize(curvePoints, w, h);
+            if (curveTexture == null)
+                curveTexture = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            var px = new Color32[w * h];
+            Color32 white = UIKit.Cyan * new Color(1, 1, 1, 0.38f), black = UIKit.Magenta * new Color(1, 1, 1, 0.38f);
+            Color32 line = UIKit.Text, middle = UIKit.TextDim * new Color(1, 1, 1, 0.45f), empty = new Color32(0, 0, 0, 0);
+            for (int i = 0; i < px.Length; i++)
+            {
+                switch (codes[i])
+                {
+                    case EvalCurve.WhiteArea: px[i] = white; break;
+                    case EvalCurve.BlackArea: px[i] = black; break;
+                    case EvalCurve.Line: px[i] = line; break;
+                    case EvalCurve.Middle: px[i] = middle; break;
+                    default: px[i] = empty; break;
+                }
+            }
+            curveTexture.SetPixels32(px);
+            curveTexture.Apply(false, false);
+            if (curveImage.sprite == null)
+                curveImage.sprite = Sprite.Create(curveTexture, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f));
+            curveImage.color = Color.white;
+
+            for (int i = curveDots.childCount - 1; i >= 0; i--) Destroy(curveDots.GetChild(i).gameObject);
+            foreach (var v in analysis.Moves)
+            {
+                if (v.Quality != MoveQuality.Erreur && v.Quality != MoveQuality.Gaffe) continue;
+                int index = v.Ply + 1;
+                var dot = UIKit.Rect("Dot" + v.Ply, curveDots).gameObject.AddComponent<Image>();
+                dot.sprite = UIKit.Glow;
+                dot.raycastTarget = false;
+                dot.color = v.Quality == MoveQuality.Gaffe ? UIKit.Danger : Orange;
+                float x = EvalCurve.X(index, curvePoints.Length), y = 0.5f + 0.5f * curvePoints[index];
+                UIKit.Anchor(dot.rectTransform, new Vector2(x, y), new Vector2(0.5f, 0.5f), Vector2.zero,
+                    Vector2.one * (v.Quality == MoveQuality.Gaffe ? 40f : 30f));
+            }
+        }
+
+        /// <summary>Toucher la courbe : revue sur la position la plus proche ; sur une erreur ou une gaffe, revue commentée du coup fautif.</summary>
+        void OnCurveTapped(Vector2 p)
+        {
+            if (analysis == null || curvePoints == null) return;
+            sfx.Play(Sfx.Click);
+            int index = EvalCurve.IndexAt(p.x, curvePoints.Length);
+            foreach (var v in analysis.Moves)
+                if (v.Ply + 1 == index && (v.Quality == MoveQuality.Erreur || v.Quality == MoveQuality.Gaffe)) { OpenVerdict(v); return; }
+            Show(analysisOverlay, false);
+            EnterReview(index);
         }
 
         /// <summary>Revue sur le coup fautif : position d'avant, flèche du meilleur coup.</summary>
