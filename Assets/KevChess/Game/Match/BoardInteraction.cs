@@ -173,7 +173,7 @@ namespace KevChess.Game.Match
                 awaitingPromotion = false;
                 board.ClearSelection();
                 if (type == PieceType.None || !match.TryHumanMove(from, to, type)) board.ReturnPiece(from);
-            });
+            }, to);
         }
     }
 }

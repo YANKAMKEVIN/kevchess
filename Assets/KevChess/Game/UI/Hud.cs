@@ -7,6 +7,7 @@ using KevChess.Game.Audio;
 using KevChess.Game.CameraRig;
 using KevChess.Game.Match;
 using KevChess.Game.View;
+using KevChess.Game.Visuals;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -635,42 +636,92 @@ namespace KevChess.Game.UI
 
         // ---------------------------------------------------------------- Promotion
 
+        const float PromoQueenSize = 230f, PromoPieceSize = 170f, PromoSpacing = 16f, PromoPadding = 28f;
+        RectTransform promoCard;
+        Image[] promoIcons;
+        static readonly PieceType[] PromoTypes = { PieceType.Queen, PieceType.Rook, PieceType.Bishop, PieceType.Knight };
+
         void BuildPromotion()
         {
-            promoOverlay = Overlay("Promotion", out var card, 960, 440, UIKit.Cyan);
+            float width = PromoQueenSize + 3 * PromoPieceSize + 3 * PromoSpacing + 2 * PromoPadding;
+            promoOverlay = Overlay("Promotion", out var card, width, PromoQueenSize + 2 * PromoPadding + 52, UIKit.Cyan);
+            promoCard = card;
             var dimButton = promoOverlay.AddComponent<Button>();
             dimButton.transition = Selectable.Transition.None;
             dimButton.onClick.AddListener(CancelPromotion);
             // La carte absorbe ses propres clics : sinon ils remonteraient jusqu'au voile et annuleraient.
             card.gameObject.AddComponent<Button>().transition = Selectable.Transition.None;
-            UIKit.VStack(card, 20, 40);
-            UIKit.Size(UIKit.Label("Title", card, "Promotion", 56, UIKit.Cyan, TextAnchor.MiddleCenter, FontStyle.Bold), 80);
+            var title = UIKit.Label("Title", card, "Promotion", 34, UIKit.Cyan, TextAnchor.UpperCenter, FontStyle.Bold);
+            UIKit.Anchor(title.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -14), new Vector2(width, 44));
+
             var row = UIKit.Rect("Choices", card);
-            UIKit.HStack(row, 16);
-            UIKit.Size(row.gameObject.AddComponent<LayoutElement>(), 180);
-            AddPromo(row, "Dame", PieceType.Queen);
-            AddPromo(row, "Tour", PieceType.Rook);
-            AddPromo(row, "Fou", PieceType.Bishop);
-            AddPromo(row, "Cavalier", PieceType.Knight);
+            UIKit.Anchor(row, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0, PromoPadding), new Vector2(width - 2 * PromoPadding, PromoQueenSize));
+            var h = UIKit.HStack(row, PromoSpacing);
+            h.childForceExpandWidth = h.childForceExpandHeight = false;
+            h.childAlignment = TextAnchor.LowerCenter;
+            promoIcons = new Image[PromoTypes.Length];
+            string[] names = { "Dame", "Tour", "Fou", "Cavalier" };
+            for (int i = 0; i < PromoTypes.Length; i++)
+                promoIcons[i] = AddPromo(row, names[i], PromoTypes[i], i == 0 ? PromoQueenSize : PromoPieceSize);
         }
 
-        void AddPromo(RectTransform row, string label, PieceType type)
+        Image AddPromo(RectTransform row, string label, PieceType type, float size)
         {
-            UIKit.Button("Promo" + type, row, label, () =>
+            var b = UIKit.Button("Promo" + type, row, label, () =>
             {
                 sfx.Play(Sfx.Click);
                 Show(promoOverlay, false);
                 var cb = promotionCallback;
                 promotionCallback = null;
                 cb?.Invoke(type);
-            }, null, 40);
+            }, null, type == PieceType.Queen ? 32 : 26);
+            var le = UIKit.Size(b, size, size);
+            le.minWidth = size;
+            var text = b.GetComponentInChildren<Text>();
+            text.alignment = TextAnchor.LowerCenter;
+            UIKit.Stretch(text.rectTransform, 6, 6, 6, 4);
+
+            // Silhouette tirée du maillage 3D de la pièce, teinte du camp à l'ouverture.
+            var iconRt = UIKit.Rect("Piece", b.transform);
+            UIKit.Stretch(iconRt, size * 0.14f, size * 0.2f, size * 0.14f, size * 0.06f);
+            var icon = iconRt.gameObject.AddComponent<Image>();
+            icon.sprite = PieceIcons.For(type);
+            icon.preserveAspect = true;
+            icon.raycastTarget = false;
+            return icon;
         }
 
-        /// <summary>Demande la pièce de promotion. Toucher en dehors de la carte annule (callback avec None).</summary>
-        public void AskPromotion(Action<PieceType> onChosen)
+        /// <summary>
+        /// Demande la pièce de promotion, dans une rangée posée près de la case <paramref name="square"/>.
+        /// Toucher en dehors de la carte annule (callback avec None).
+        /// </summary>
+        public void AskPromotion(Action<PieceType> onChosen, int square = Square.None)
         {
             promotionCallback = onChosen;
+            var side = match.Game != null ? match.Game.SideToMove : PieceColor.White;
+            var tint = side == PieceColor.White ? UIKit.Cyan : UIKit.Magenta;
+            foreach (var icon in promoIcons) icon.color = tint;
+            promoCard.anchoredPosition = PromotionAnchor(square);
             Show(promoOverlay, true);
+        }
+
+        /// <summary>Position de la carte : au-dessus de la case si elle est dans le bas de l'écran, sinon en dessous ; centrée à défaut.</summary>
+        Vector2 PromotionAnchor(int square)
+        {
+            var cam = orbit != null ? orbit.GetComponent<Camera>() : null;
+            if (square == Square.None || cam == null || canvas.scaleFactor <= 0f) return Vector2.zero;
+            var world = board.transform.TransformPoint(BoardBuilder.SquareToWorld(Square.File(square), Square.Rank(square)));
+            Vector3 screen = cam.WorldToScreenPoint(world);
+            if (screen.z <= 0f) return Vector2.zero;
+            float k = canvas.scaleFactor;
+            var half = new Vector2(Screen.width, Screen.height) / (2f * k);
+            var local = new Vector2(screen.x / k, screen.y / k) - half;
+            var cardHalf = promoCard.sizeDelta * 0.5f;
+            const float gap = 70f; // la case et la pièce restent visibles
+            float y = local.y < 0f ? local.y + gap + cardHalf.y : local.y - gap - cardHalf.y;
+            float x = Mathf.Clamp(local.x, -half.x + cardHalf.x + 12f, half.x - cardHalf.x - 12f);
+            y = Mathf.Clamp(y, -half.y + cardHalf.y + 12f, half.y - cardHalf.y - 12f);
+            return new Vector2(x, y);
         }
 
         public void CancelPromotion()
