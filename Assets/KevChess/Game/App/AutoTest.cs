@@ -221,7 +221,7 @@ namespace KevChess.Game.App
             // Puzzles : liste, coup faux, indice, résolution d'un mat en 2.
             hud.ShowMenu(true);
             yield return new WaitForSeconds(0.3f);
-            Press("Menu/Card/Puzzles");
+            Press("Menu/Card/Modes/Row1/Puzzles");
             yield return new WaitForSeconds(0.6f);
             yield return Capture("puzzles_liste");
             int puzzleIndex = 0;
@@ -269,7 +269,7 @@ namespace KevChess.Game.App
             int themeBefore = VisualTheme.Current;
             hud.ShowMenu(true);
             yield return new WaitForSeconds(0.3f);
-            Press("Menu/Card/Settings");
+            Press("Menu/Card/Modes/Row2/Settings");
             yield return new WaitForSeconds(0.5f);
             yield return Capture("reglages");
             Press("Settings/Card/Themes/Theme" + (themeBefore + 1) % VisualTheme.Names.Length);
@@ -286,7 +286,7 @@ namespace KevChess.Game.App
             // Écran « Partie à deux » : cadence et caméra.
             hud.ShowMenu(true);
             yield return new WaitForSeconds(0.3f);
-            Press("Menu/Card/Local");
+            Press("Menu/Card/Modes/Row0/Local");
             yield return new WaitForSeconds(0.3f);
             Press("LocalSetup/Card/Clocks/Row1/Clock4");
             yield return new WaitForSeconds(0.3f);
@@ -295,7 +295,7 @@ namespace KevChess.Game.App
             yield return new WaitForSeconds(0.3f);
 
             // Contre l'IA par son écran : Noirs (l'IA ouvre), niveau Moyen, cadence 3+2.
-            Press("Menu/Card/VsAI");
+            Press("Menu/Card/Modes/Row0/VsAI");
             yield return new WaitForSeconds(0.3f);
             Press("AISetup/Card/Colors/Color1");
             Press("AISetup/Card/Levels/Level2");

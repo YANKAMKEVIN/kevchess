@@ -434,48 +434,70 @@ namespace KevChess.Game.UI
         static void FitHeight(RectTransform card) =>
             card.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
+        const float MenuDriftDegreesPerSecond = 7f;
+        Button playAIButton;
+
         void BuildMenu()
         {
-            menuOverlay = Overlay("Menu", out var card, 900, 1340, UIKit.Cyan);
-            UIKit.VStack(card, 24, 56);
+            // Écran titre : titre en haut, plateau visible qui tourne lentement, carte des modes dans le tiers bas.
+            menuOverlay = Overlay("Menu", out var card, 960, 600, UIKit.Cyan);
+            menuOverlay.GetComponent<Image>().color = new Color(0.01f, 0.01f, 0.04f, 0.22f);
+            UIKit.Anchor(card, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0, 40), new Vector2(960, 600));
+            card.GetComponent<Image>().color = new Color(0.03f, 0.03f, 0.07f, 0.88f);
+            UIKit.VStack(card, 16, 40);
             FitHeight(card);
 
-            var title = UIKit.Label("Title", card, "KEVCHESS", 110, UIKit.Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
-            UIKit.Size(title, 150);
+            var header = UIKit.Rect("Header", menuOverlay.transform);
+            UIKit.Anchor(header, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -110), new Vector2(1000, 230));
+            var title = UIKit.Label("Title", header, "KEVCHESS", 128, UIKit.Cyan, TextAnchor.UpperCenter, FontStyle.Bold);
+            UIKit.Stretch(title.rectTransform, 0, 60, 0, 0);
             var sh = title.gameObject.AddComponent<Outline>();
             sh.effectColor = UIKit.Magenta * new Color(1, 1, 1, 0.6f);
             sh.effectDistance = new Vector2(4, -4);
-            var sub = UIKit.Label("Subtitle", card, "Échecs en trois dimensions", 36, UIKit.TextDim);
-            UIKit.Size(sub, 60);
+            title.gameObject.AddComponent<Shadow>().effectColor = new Color(0, 0, 0, 0.8f);
+            var sub = UIKit.Label("Subtitle", header, "Échecs en trois dimensions", 38, UIKit.Text, TextAnchor.LowerCenter);
+            UIKit.Stretch(sub.rectTransform, 0, 0, 0, 170);
+            sub.gameObject.AddComponent<Shadow>().effectColor = new Color(0, 0, 0, 0.8f);
 
-            continueButton = UIKit.Button("Continue", card, "Continuer", () => { sfx.Play(Sfx.Click); ShowMenu(false); });
-            UIKit.Size(continueButton, 116);
+            // Bouton principal : Continuer, Reprendre la partie, ou à défaut Contre l'IA.
+            continueButton = UIKit.Button("Continue", card, "Continuer", () => { sfx.Play(Sfx.Click); ShowMenu(false); }, UIKit.Cyan, 46);
+            UIKit.Size(continueButton, 130);
             resumeButton = UIKit.Button("Resume", card, "Reprendre la partie", () =>
             {
                 sfx.Play(Sfx.Click);
                 if (match.ResumeSaved()) ShowMenu(false);
-            });
-            UIKit.Size(resumeButton, 116);
-            var local = UIKit.Button("Local", card, "Partie à deux", () => { sfx.Play(Sfx.Click); OpenLocalSetup(); });
-            UIKit.Size(local, 116);
-            var vsAI = UIKit.Button("VsAI", card, "Contre l'IA", () => { sfx.Play(Sfx.Click); OpenAISetup(); }, UIKit.Magenta);
-            UIKit.Size(vsAI, 116);
-            var legends = UIKit.Button("Legends", card, "Légendes", () =>
-            {
-                sfx.Play(Sfx.Click);
-                Show(menuOverlay, false);
-                LegendsRequested?.Invoke();
-            }, new Color(1f, 0.82f, 0.35f));
-            UIKit.Size(legends, 116);
-            var puzzles = UIKit.Button("Puzzles", card, "Puzzles", () => { sfx.Play(Sfx.Click); OpenPuzzleList(); }, UIKit.Magenta);
-            UIKit.Size(puzzles, 116);
-            var settings = UIKit.Button("Settings", card, "Réglages", () => { sfx.Play(Sfx.Click); OpenSettings(); }, UIKit.TextDim);
-            UIKit.Size(settings, 100);
+            }, UIKit.Cyan, 46);
+            UIKit.Size(resumeButton, 130);
+            playAIButton = UIKit.Button("PlayAI", card, "Contre l'IA", () => { sfx.Play(Sfx.Click); OpenAISetup(); }, UIKit.Magenta, 46);
+            UIKit.Size(playAIButton, 130);
+            foreach (var primary in new[] { continueButton, resumeButton, playAIButton })
+                Highlight(primary, true, primary == playAIButton ? UIKit.Magenta : UIKit.Cyan);
 
-            if (Application.platform != RuntimePlatform.Android && Application.platform != RuntimePlatform.IPhonePlayer)
+            // Les autres modes en grille de deux colonnes.
+            var modes = UIKit.Rect("Modes", card);
+            UIKit.VStack(modes, 14);
+            modes.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            var entries = new System.Collections.Generic.List<(string name, string text, Action action, Color accent)>
             {
-                var quit = UIKit.Button("Quit", card, "Quitter", Application.Quit, UIKit.TextDim);
-                UIKit.Size(quit, 100);
+                ("Local", "Partie à deux", OpenLocalSetup, UIKit.Cyan),
+                ("VsAI", "Contre l'IA", OpenAISetup, UIKit.Magenta),
+                ("Legends", "Légendes", () => { Show(menuOverlay, false); LegendsRequested?.Invoke(); }, new Color(1f, 0.82f, 0.35f)),
+                ("Puzzles", "Puzzles", OpenPuzzleList, UIKit.Magenta),
+                ("Settings", "Réglages", OpenSettings, UIKit.TextDim),
+            };
+            if (Application.platform != RuntimePlatform.Android && Application.platform != RuntimePlatform.IPhonePlayer)
+                entries.Add(("Quit", "Quitter", Application.Quit, UIKit.TextDim));
+            RectTransform row = null;
+            for (int i = 0; i < entries.Count; i++)
+            {
+                if (i % 2 == 0)
+                {
+                    row = UIKit.Rect("Row" + i / 2, modes);
+                    UIKit.HStack(row, 14);
+                    UIKit.Size(row.gameObject.AddComponent<LayoutElement>(), 96);
+                }
+                var e = entries[i];
+                UIKit.Button(e.name, row, e.text, () => { sfx.Play(Sfx.Click); e.action(); }, e.accent, 36);
             }
         }
 
@@ -625,8 +647,15 @@ namespace KevChess.Game.UI
                 bool inGame = match.Game != null && !match.Game.IsOver;
                 continueButton.gameObject.SetActive(inGame);
                 resumeButton.gameObject.SetActive((!inGame || match.IsPuzzle) && MatchController.HasSavedMatch());
+                playAIButton.gameObject.SetActive(!continueButton.gameObject.activeSelf && !resumeButton.gameObject.activeSelf);
+            }
+            else if (menuOverlay.activeSelf && match.Game != null)
+            {
+                // Fin de l'écran titre : la caméra revient sur la vue du joueur.
+                orbit.ResetView(match.Settings.Mode == MatchMode.LocalTwoPlayers ? localViewSide : match.ViewSide);
             }
             Show(menuOverlay, show);
+            if (!show) hudGroup.SetActive(true);
         }
 
         // ---------------------------------------------------------------- Promotion
@@ -957,6 +986,11 @@ namespace KevChess.Game.UI
             // L'IA et la pendule attendent tant qu'un écran est ouvert (la promotion fait partie du coup).
             match.Paused = menuOverlay.activeSelf || aiOverlay.activeSelf || confirmOverlay.activeSelf || endOverlay.activeSelf ||
                            IsScreenOverlayOpen || reviewing || drawPending;
+
+            // Écran titre : le bandeau de jeu s'efface et la caméra tourne lentement autour du plateau.
+            bool title = menuOverlay.activeSelf;
+            if (hudGroup.activeSelf == title) hudGroup.SetActive(!title);
+            if (title) orbit.Drift(MenuDriftDegreesPerSecond * Time.unscaledDeltaTime);
 
             if (match.Game == null) return;
             if (!match.Paused && !match.Game.IsOver) playSeconds += Time.unscaledDeltaTime;

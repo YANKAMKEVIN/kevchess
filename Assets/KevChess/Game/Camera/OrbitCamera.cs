@@ -99,6 +99,9 @@ namespace KevChess.Game.CameraRig
             targetPitch = Mathf.Clamp(targetPitch - pixelDelta.y * OrbitSensitivity * scale, MinPitch, MaxPitch);
         }
 
+        /// <summary>Rotation lente autour du plateau (écran titre), en degrés à ajouter au cap visé.</summary>
+        public void Drift(float degrees) => targetYaw += degrees;
+
         public void Zoom(float factor)
         {
             if (factor <= 0f) return;
