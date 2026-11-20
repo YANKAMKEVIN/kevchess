@@ -143,18 +143,18 @@ namespace KevChess.Game.UI
             openingLine.resizeTextMinSize = 18;
             openingLine.resizeTextMaxSize = 27;
 
-            // Barre d'actions : cinq boutons, en partie comme en puzzle.
+            // Barre d'actions : cinq boutons à pictogramme, en partie comme en puzzle.
             var bar = UIKit.Panel("BottomBar", hudGroup.transform, UIKit.Glass, true, UIKit.Cyan);
             bottomBar = bar.gameObject;
             UIKit.Anchor(bar.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0, 28), new Vector2(1040, 140));
-            UIKit.HStack(bar.rectTransform, 14, 16);
-            UIKit.Button("Menu", bar.transform, "Menu", () => { sfx.Play(Sfx.Click); ShowMenu(true); }, null, 34);
-            undoButton = UIKit.Button("Undo", bar.transform, "Annuler", () => { sfx.Play(Sfx.Click); match.UndoForHuman(); }, null, 34);
-            listButton = UIKit.Button("List", bar.transform, "Liste", () => { sfx.Play(Sfx.Click); OpenPuzzleList(); }, null, 34);
-            hintButton = UIKit.Button("Hint", bar.transform, "Indice", OnHintPressed, null, 34);
-            viewButton = UIKit.Button("View", bar.transform, "Vue", OnViewPressed, null, 34);
-            moreButton = UIKit.Button("More", bar.transform, "Plus…", () => { sfx.Play(Sfx.Click); OpenActions(); }, UIKit.Magenta, 34);
-            nextButton = UIKit.Button("Next", bar.transform, "Suivant", () => { sfx.Play(Sfx.Click); NextPuzzle(); }, UIKit.Magenta, 34);
+            UIKit.HStack(bar.rectTransform, 14, 14);
+            UIKit.IconButton("Menu", bar.transform, IconKind.Menu, "Menu", () => { sfx.Play(Sfx.Click); ShowMenu(true); });
+            undoButton = UIKit.IconButton("Undo", bar.transform, IconKind.Undo, "Annuler", () => { sfx.Play(Sfx.Click); match.UndoForHuman(); });
+            listButton = UIKit.IconButton("List", bar.transform, IconKind.List, "Liste", () => { sfx.Play(Sfx.Click); OpenPuzzleList(); });
+            hintButton = UIKit.IconButton("Hint", bar.transform, IconKind.Hint, "Indice", OnHintPressed);
+            viewButton = UIKit.IconButton("View", bar.transform, IconKind.View, "Vue", OnViewPressed);
+            moreButton = UIKit.IconButton("More", bar.transform, IconKind.More, "Plus…", () => { sfx.Play(Sfx.Click); OpenActions(); }, UIKit.Magenta);
+            nextButton = UIKit.IconButton("Next", bar.transform, IconKind.Next, "Suivant", () => { sfx.Play(Sfx.Click); NextPuzzle(); }, UIKit.Magenta);
         }
 
         void BuildPlayerCard(RectTransform parent, PieceColor color, out Text name, out Text score, out Image turn, out Text clock)
@@ -269,7 +269,11 @@ namespace KevChess.Game.UI
             hintButton.interactable = match.CanHumanAct;
             moreButton.interactable = !match.IsAnimating;
             nextButton.interactable = !match.IsAnimating;
+            // Bouton principal du contexte mis en avant : Suivant (puzzle résolu), Indice (puzzle en cours),
+            // Plus… (partie finie : revoir, analyser).
             Highlight(nextButton, puzzle && match.Puzzle.IsSolved, UIKit.Magenta);
+            Highlight(hintButton, puzzle && !match.Puzzle.IsSolved, UIKit.Cyan);
+            Highlight(moreButton, !puzzle && game.IsOver, UIKit.Magenta);
 
             if (reviewing)
             {

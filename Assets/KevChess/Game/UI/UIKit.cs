@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using KevChess.Core.Ux;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -17,6 +19,7 @@ namespace KevChess.Game.UI
 
         static Font font;
         static Sprite rounded, roundedOutline, glow;
+        static readonly Dictionary<IconKind, Sprite> icons = new Dictionary<IconKind, Sprite>();
 
         public static Font Font
         {
@@ -66,6 +69,42 @@ namespace KevChess.Game.UI
             tex.SetPixels32(px);
             tex.Apply(false, true);
             return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
+        }
+
+        /// <summary>Pictogramme blanc (teinté par Image.color), dessiné une fois depuis Core.Ux.IconShapes.</summary>
+        public static Sprite Icon(IconKind kind)
+        {
+            if (icons.TryGetValue(kind, out var cached) && cached != null) return cached;
+            const int size = 96;
+            var alpha = IconShapes.Rasterize(kind, size);
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            var px = new Color32[size * size];
+            for (int i = 0; i < px.Length; i++) px[i] = new Color32(255, 255, 255, alpha[i]);
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+            var sprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
+            icons[kind] = sprite;
+            return sprite;
+        }
+
+        /// <summary>Bouton à pictogramme au-dessus d'un libellé court.</summary>
+        public static Button IconButton(string name, Transform parent, IconKind icon, string text, Action onClick, Color? accent = null, int fontSize = 26)
+        {
+            var color = accent ?? Cyan;
+            var b = Button(name, parent, text, onClick, color, fontSize);
+            var label = b.GetComponentInChildren<Text>();
+            label.alignment = TextAnchor.LowerCenter;
+            label.fontStyle = FontStyle.Normal;
+            Stretch(label.rectTransform, 6, 8, 6, 4);
+
+            var iconRt = Rect("Icon", b.transform);
+            var img = iconRt.gameObject.AddComponent<Image>();
+            img.sprite = Icon(icon);
+            img.color = Color.Lerp(Text, color, 0.45f);
+            img.raycastTarget = false;
+            img.preserveAspect = true;
+            Anchor(iconRt, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -10), new Vector2(56, 56));
+            return b;
         }
 
         public static RectTransform Rect(string name, Transform parent)
