@@ -42,7 +42,10 @@ namespace KevChess.Game.UI
 
         GameObject menuOverlay, aiOverlay, promoOverlay, endOverlay, confirmOverlay;
         Button continueButton, resumeButton;
-        Text endTitle, endReason;
+        Text endTitle, endReason, endSummary;
+        RectTransform endSparks;
+        float playSeconds;
+        bool playTimeKnown;
         Button endAnalyzeButton;
         Action confirmAction;
         Text confirmText;
@@ -744,6 +747,17 @@ namespace KevChess.Game.UI
             UIKit.Size(endTitle, 120);
             endReason = UIKit.Label("Reason", card, "", 40, UIKit.TextDim);
             UIKit.Size(endReason, 70);
+            // Bilan : coups, durée, ouverture, et bilan contre ce niveau.
+            endSummary = UIKit.Label("Summary", card, "", 30, UIKit.Text);
+            UIKit.Size(endSummary, 96);
+            endSummary.resizeTextForBestFit = true;
+            endSummary.resizeTextMinSize = 20;
+            endSummary.resizeTextMaxSize = 30;
+
+            // Étincelles de victoire, derrière la carte.
+            endSparks = UIKit.Rect("Sparks", endOverlay.transform);
+            UIKit.Anchor(endSparks, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            endSparks.SetSiblingIndex(card.GetSiblingIndex());
             UIKit.Size(UIKit.Button("Replay", card, "Rejouer", () =>
             {
                 sfx.Play(Sfx.Click);
@@ -780,6 +794,16 @@ namespace KevChess.Game.UI
                              (game.Result == GameResult.BlackWins && s.HumanColor == PieceColor.Black));
             bool humanLost = s.Mode == MatchMode.VersusAI && game.Result != GameResult.Draw && !humanWon;
             if (s.Mode == MatchMode.VersusAI) GamePrefs.RecordResult(s.Level, humanWon ? 1 : humanLost ? -1 : 0);
+            string levelName = null;
+            var record = new GamePrefs.Record();
+            if (s.Mode == MatchMode.VersusAI)
+            {
+                levelName = MatchSettings.LevelName(s.Level);
+                record = GamePrefs.Stats(s.Level);
+            }
+            endSummary.text = EndSummary.Line(game.Moves.Count, playTimeKnown ? playSeconds : -1, Opening(game), levelName,
+                record.Wins, record.Draws, record.Losses);
+            bool celebrate = humanWon || (s.Mode == MatchMode.LocalTwoPlayers && game.Result != GameResult.Draw);
             endTitle.color = humanLost ? UIKit.Magenta : UIKit.Cyan;
             var resultSound = game.Result == GameResult.Draw ? Sfx.Draw : humanLost ? Sfx.Defeat : Sfx.Victory;
 
@@ -793,16 +817,49 @@ namespace KevChess.Game.UI
             }
             else if (game.EndReason == GameEndReason.Timeout || game.EndReason == GameEndReason.TimeoutInsufficientMaterial)
                 sfx.PlayTimeout();
-            StartCoroutine(ShowEndScreen(delay, resultSound));
+            StartCoroutine(ShowEndScreen(delay, resultSound, celebrate));
         }
 
-        IEnumerator ShowEndScreen(float delay, Sfx resultSound)
+        IEnumerator ShowEndScreen(float delay, Sfx resultSound, bool celebrate)
         {
             var game = match.Game;
             yield return new WaitForSecondsRealtime(delay);
             if (match.Game != game || !game.IsOver || reviewing) yield break;
             sfx.Play(resultSound);
             Show(endOverlay, true);
+            if (celebrate) StartCoroutine(PlaySparks());
+        }
+
+        /// <summary>Gerbe d'étincelles aux couleurs du thème, derrière la carte de fin (trajectoires : Core.Ux.SparkBurst).</summary>
+        IEnumerator PlaySparks()
+        {
+            const int count = 42;
+            var palette = VisualTheme.Palette;
+            var sparks = new Image[count];
+            for (int i = 0; i < count; i++)
+            {
+                var img = UIKit.Rect("Spark", endSparks).gameObject.AddComponent<Image>();
+                img.sprite = UIKit.Glow;
+                img.raycastTarget = false;
+                img.color = i % 2 == 0 ? palette.WhiteGlow : palette.BlackGlow;
+                sparks[i] = img;
+            }
+            int seed = UnityEngine.Random.Range(1, 1000);
+            for (float t = 0f; t < SparkBurst.Lifetime && endOverlay.activeSelf; t += Time.unscaledDeltaTime)
+            {
+                for (int i = 0; i < count; i++)
+                {
+                    var p = SparkBurst.At(i, t, seed);
+                    var rt = sparks[i].rectTransform;
+                    rt.anchoredPosition = new Vector2(p.X, p.Y);
+                    rt.sizeDelta = Vector2.one * (34f * p.Scale);
+                    var c = sparks[i].color;
+                    c.a = p.Alpha;
+                    sparks[i].color = c;
+                }
+                yield return null;
+            }
+            foreach (var img in sparks) if (img != null) Destroy(img.gameObject);
         }
 
         static string ResultTitle(ChessGame game, MatchSettings s)
@@ -840,6 +897,9 @@ namespace KevChess.Game.UI
             promotionCallback = null;
             CancelAnalysis();
             lastTickSecond = -1;
+            // Durée de jeu : connue pour une partie neuve, pas pour une partie reprise.
+            playSeconds = 0f;
+            playTimeKnown = match.Game.Moves.Count == 0;
         }
 
         // ---------------------------------------------------------------- Confirmation
@@ -907,6 +967,7 @@ namespace KevChess.Game.UI
                            IsScreenOverlayOpen || reviewing || drawPending;
 
             if (match.Game == null) return;
+            if (!match.Paused && !match.Game.IsOver) playSeconds += Time.unscaledDeltaTime;
             UpdateClocks();
             UpdateClockTick();
             if (!reviewing && match.IsAIThinking && !match.Game.IsOver) status.text = ThinkingText();
