@@ -22,6 +22,7 @@ namespace KevChess.Game.UI
         const string ClockLocalKey = "kevchess.clock.local";
         const string PuzzlesKey = "kevchess.puzzles.solved";
         const string StatsKey = "kevchess.stats.";
+        const string TipsKey = "kevchess.tips.step";
 
         public static readonly string[] AnimationNames = { "lente", "normale", "rapide" };
         static readonly float[] AnimationSpeeds = { 0.5f, 1f, 2f };
@@ -72,6 +73,13 @@ namespace KevChess.Game.UI
         {
             get => PlayerPrefs.GetInt(FlipKey, 0) == 1;
             set => SetInt(FlipKey, value ? 1 : 0);
+        }
+
+        /// <summary>Bulles d'accueil du plateau : étape atteinte (BoardTips.Count = vues).</summary>
+        public static int TipsStep
+        {
+            get => Mathf.Max(0, PlayerPrefs.GetInt(TipsKey, 0));
+            set => SetInt(TipsKey, value);
         }
 
         /// <summary>Index de la dernière cadence choisie dans TimeControl.Presets.</summary>

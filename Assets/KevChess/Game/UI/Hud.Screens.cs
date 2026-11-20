@@ -142,6 +142,16 @@ namespace KevChess.Game.UI
 
             flipButton = SettingButton(card, "Flip", () => GamePrefs.AutoFlip = !GamePrefs.AutoFlip);
 
+            var tipsAgain = UIKit.Button("TipsAgain", card, "Revoir les gestes du plateau", () =>
+            {
+                sfx.Play(Sfx.Click);
+                RestartTips();
+                Show(settingsOverlay, false);
+                // Les bulles s'affichent sur la partie en cours ; sans partie, on revient au menu.
+                if (match.Game == null || match.Game.IsOver) ShowMenu(true);
+            }, UIKit.Cyan, 36);
+            UIKit.Size(tipsAgain, 92);
+
             var back = UIKit.Button("Back", card, "Retour", () => { sfx.Play(Sfx.Click); Show(settingsOverlay, false); ShowMenu(true); }, UIKit.Magenta);
             UIKit.Size(back, 108);
         }

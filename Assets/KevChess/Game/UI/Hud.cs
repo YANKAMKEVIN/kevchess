@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Text;
 using KevChess.Core;
+using KevChess.Core.Ux;
 using KevChess.Game.Audio;
 using KevChess.Game.CameraRig;
 using KevChess.Game.Match;
@@ -90,6 +91,7 @@ namespace KevChess.Game.UI
 
             BuildHud();
             BuildReviewBar();
+            BuildTips();
             BuildToast();
             BuildMenu();
             BuildAISetup();
@@ -215,10 +217,14 @@ namespace KevChess.Game.UI
             if (match.Game == null) return;
             if (match.Settings.Mode == MatchMode.LocalTwoPlayers) localViewSide = match.Game.SideToMove;
             orbit.ResetView(match.Settings.Mode == MatchMode.LocalTwoPlayers ? localViewSide : match.ViewSide);
+            NotifyTipGesture(BoardGesture.CameraRecentered);
         }
 
         void OnMoveLanded(MoveVisual v)
         {
+            // Bulle d'accueil « jouer un coup » : seulement pour un coup d'un joueur humain.
+            if (match.Game.Moves.Count > 0 && match.Settings.IsHuman(Piece.Opposite(match.Game.SideToMove)))
+                NotifyTipGesture(BoardGesture.MovePlayed);
             // Partie à deux : la caméra passe du côté du camp au trait.
             if (match.Settings.Mode != MatchMode.LocalTwoPlayers || !GamePrefs.AutoFlip || match.Game.IsOver) return;
             localViewSide = match.Game.SideToMove;
@@ -829,6 +835,7 @@ namespace KevChess.Game.UI
             UpdateClockTick();
             if (!reviewing && match.IsAIThinking && !match.Game.IsOver) status.text = ThinkingText();
             UpdateToast();
+            UpdateTips();
         }
 
         /// <summary>Tic chaque seconde sous 10 s, pour la pendule d'un joueur humain qui tourne.</summary>
