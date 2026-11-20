@@ -21,6 +21,10 @@ namespace KevChess.Game.Visuals
         Transform _selection, _lastFrom, _lastTo, _check;
         Material _checkMaterial;
         Color _checkBase;
+        readonly List<Transform> _flash = new List<Transform>();
+        Material _flashMaterial;
+        Color _flashBase;
+        float _flashStart, _flashUntil;
 
         /// <summary>Crée le composant sur un nouvel objet (enfant optionnel).</summary>
         public static BoardHighlights Create(Transform parent = null)
@@ -102,8 +106,37 @@ namespace KevChess.Game.Visuals
             if (_check != null) _check.gameObject.SetActive(false);
         }
 
+        /// <summary>
+        /// Fait clignoter des cases en rouge pendant <paramref name="seconds"/> (roi menacé, pièce qui donne échec…).
+        /// Vector2Int = (file, rank).
+        /// </summary>
+        public void Flash(IEnumerable<Vector2Int> squares, float seconds = 1.6f)
+        {
+            ClearFlash();
+            if (_flashMaterial == null)
+            {
+                _flashMaterial = new Material(NeonMaterials.Check);
+                _flashBase = _flashMaterial.GetColor(NeonMaterials.BaseColorProperty);
+            }
+            foreach (Vector2Int c in squares)
+            {
+                Transform t = Take(_flashMaterial);
+                Place(t, c.x, c.y, 1.1f);
+                _flash.Add(t);
+            }
+            _flashStart = Time.time;
+            _flashUntil = Time.time + seconds;
+        }
+
+        public void ClearFlash()
+        {
+            for (int i = 0; i < _flash.Count; i++) Release(_flash[i]);
+            _flash.Clear();
+        }
+
         public void ClearAll()
         {
+            ClearFlash();
             ClearSelection();
             ClearLegalMoves();
             ClearLastMove();
@@ -136,6 +169,16 @@ namespace KevChess.Game.Visuals
                 float s = 1.4f + 0.2f * pulse;
                 _check.localScale = new Vector3(s, 1f, s);
             }
+            if (_flash.Count > 0)
+            {
+                if (t >= _flashUntil) ClearFlash();
+                else
+                {
+                    // Trois éclats francs, puis extinction.
+                    float on = 0.5f + 0.5f * Mathf.Cos((t - _flashStart) * Mathf.PI * 2f * 1.9f);
+                    _flashMaterial.SetColor(NeonMaterials.BaseColorProperty, _flashBase * (0.25f + 1.25f * on));
+                }
+            }
         }
 
         void OnEnable() => VisualTheme.Changed += OnThemeChanged;
@@ -144,13 +187,15 @@ namespace KevChess.Game.Visuals
         /// <summary>Le halo d'échec est une instance : on reprend la couleur du thème.</summary>
         void OnThemeChanged()
         {
-            if (_checkMaterial == null) return;
+            if (_checkMaterial == null && _flashMaterial == null) return;
             _checkBase = NeonMaterials.Check.GetColor(NeonMaterials.BaseColorProperty);
+            if (_flashMaterial != null) _flashBase = _checkBase;
         }
 
         void OnDestroy()
         {
             if (_checkMaterial != null) Destroy(_checkMaterial);
+            if (_flashMaterial != null) Destroy(_flashMaterial);
         }
 
         // ------------------------------------------------------------------ pool
