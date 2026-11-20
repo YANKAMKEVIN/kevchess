@@ -303,6 +303,9 @@ namespace KevChess.Game.App
             yield return new WaitForSeconds(0.3f);
             yield return Capture("contre_ia_config");
             Press("AISetup/Card/Actions/Play");
+            yield return null;
+            // Une partie non terminée serait remplacée : on confirme.
+            if (hud.IsConfirmOpen) Press("Confirm/Card/Buttons/Yes");
             yield return new WaitForSeconds(0.25f);
             Check(match.Settings.Mode == MatchMode.VersusAI && match.Settings.ClockBase == 180 && match.Settings.ClockIncrement == 2,
                 "partie contre l'IA lancée en 3+2");

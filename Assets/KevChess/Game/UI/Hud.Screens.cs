@@ -106,6 +106,11 @@ namespace KevChess.Game.UI
         void StartLocalMatch()
         {
             sfx.Play(Sfx.Click);
+            ConfirmReplace(StartLocalMatchNow);
+        }
+
+        void StartLocalMatchNow()
+        {
             GamePrefs.SetClockPreset(false, localClockChoice);
             var settings = new MatchSettings { Mode = MatchMode.LocalTwoPlayers };
             settings.Clock = TimeControl.Presets[localClockChoice];

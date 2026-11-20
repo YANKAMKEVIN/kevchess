@@ -67,6 +67,9 @@ namespace KevChess.Game.UI
             menuOverlay.activeSelf || aiOverlay.activeSelf || promoOverlay.activeSelf || confirmOverlay.activeSelf || endOverlay.activeSelf ||
             IsScreenOverlayOpen;
 
+        /// <summary>Dialogue de confirmation affiché (recette automatique).</summary>
+        public bool IsConfirmOpen => confirmOverlay.activeSelf;
+
         /// <summary>Écran de fin de partie affiché (recette automatique).</summary>
         public bool IsEndScreenOpen => endOverlay.activeSelf;
 
@@ -590,6 +593,24 @@ namespace KevChess.Game.UI
         void StartAIMatch()
         {
             sfx.Play(Sfx.Click);
+            ConfirmReplace(StartAIMatchNow);
+        }
+
+        /// <summary>
+        /// Lance <paramref name="start"/> tout de suite, ou après confirmation si une partie non terminée serait perdue :
+        /// la partie en cours, ou, pendant un puzzle, la partie sauvegardée qu'une nouvelle partie écraserait.
+        /// </summary>
+        void ConfirmReplace(Action start)
+        {
+            string question = match.IsPuzzle
+                ? ReplaceGuard.Question(SavedMatch.Load()?.Rebuild(), true)
+                : ReplaceGuard.Question(match.Game);
+            if (question == null) start();
+            else Confirm(question, start);
+        }
+
+        void StartAIMatchNow()
+        {
             var color = aiColorChoice == 2
                 ? (UnityEngine.Random.value < 0.5f ? PieceColor.White : PieceColor.Black)
                 : (PieceColor)aiColorChoice;
