@@ -177,6 +177,7 @@ namespace KevChess.Game.UI
             dot.color = accent;
             dot.raycastTarget = false;
             UIKit.Anchor(dot.rectTransform, new Vector2(0f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(46, 0), new Vector2(56, 56));
+            RegisterCardFx(color, card, dot, accent);
 
             name = UIKit.Label("Name", card.transform, color == PieceColor.White ? "Blancs" : "Noirs", 38, UIKit.Text, TextAnchor.MiddleLeft, FontStyle.Bold);
             // Hauteur limitée : le nom reste sur une ligne (police réduite) plutôt que de passer à la ligne.
@@ -228,6 +229,7 @@ namespace KevChess.Game.UI
 
         void OnMoveLanded(MoveVisual v)
         {
+            NoteAIMove();
             // Bulle d'accueil « jouer un coup » : seulement pour un coup d'un joueur humain.
             if (match.Game.Moves.Count > 0 && match.Settings.IsHuman(Piece.Opposite(match.Game.SideToMove)))
                 NotifyTipGesture(BoardGesture.MovePlayed);
@@ -999,6 +1001,7 @@ namespace KevChess.Game.UI
             if (!reviewing && match.IsAIThinking && !match.Game.IsOver) status.text = ThinkingText();
             UpdateToast();
             UpdateTips();
+            UpdateThinkingGlow();
         }
 
         /// <summary>Tic chaque seconde sous 10 s, pour la pendule d'un joueur humain qui tourne.</summary>
