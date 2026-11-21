@@ -1,5 +1,6 @@
 using System;
 using System.Threading;
+using KevChess.AI.Uci;
 using KevChess.Core;
 using KevChess.Core.Ux;
 using KevChess.Game.Audio;
@@ -23,7 +24,7 @@ namespace KevChess.Game.UI
         Button localFlipButton;
 
         // Réglages.
-        Button soundButton, hapticsButton, contrastButton, notationButton, animButton, musicButton, flipButton;
+        Button soundButton, hapticsButton, contrastButton, notationButton, animButton, musicButton, flipButton, engineButton;
         Button[] themeButtons;
         Text volumeLabel;
         VolumeSlider volumeSlider;
@@ -183,6 +184,8 @@ namespace KevChess.Game.UI
             // Choix à plusieurs valeurs : valeur affichée à droite, toucher pour changer.
             notationButton = ValueSetting(card, "Notation", "Notation", () => { GamePrefs.FrenchNotation = !GamePrefs.FrenchNotation; Refresh(); });
             animButton = ValueSetting(card, "Animations", "Animations", () => GamePrefs.AnimationIndex = (GamePrefs.AnimationIndex + 1) % GamePrefs.AnimationNames.Length);
+            engineButton = ValueSetting(card, "Engine", "Moteur de l'IA", () =>
+                GamePrefs.Engine = GamePrefs.Engine == EngineKind.Stockfish ? EngineKind.KevChess : EngineKind.Stockfish);
 
             var tipsAgain = UIKit.Button("TipsAgain", card, "Revoir les gestes du plateau", () =>
             {
@@ -289,6 +292,8 @@ namespace KevChess.Game.UI
             UIKit.SetSwitch(flipButton, GamePrefs.AutoFlip, UIKit.Cyan);
             UIKit.SetRowValue(notationButton, GamePrefs.FrenchNotation ? "française (C, F, T, D, R)" : "anglaise (N, B, R, Q, K)");
             UIKit.SetRowValue(animButton, GamePrefs.AnimationNames[GamePrefs.AnimationIndex]);
+            UIKit.SetRowValue(engineButton, GamePrefs.Engine == EngineKind.KevChess ? "KevChess (intégrée)"
+                : AIAdapter.StockfishUsable ? "Stockfish" : "Stockfish absent : KevChess");
         }
 
         // ---------------------------------------------------------------- Puzzles

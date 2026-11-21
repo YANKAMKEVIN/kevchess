@@ -24,6 +24,7 @@ Dépôt : https://github.com/YANKAMKEVIN/kevchess (privé).
 Assets/KevChess/
   Core/      règles pures (C#, sans UnityEngine) : Position, MoveGenerator, ChessGame, Notation (SAN/UCI), FEN, PGN
   AI/        IA pure : Searcher (alpha-bêta, TT, quiescence, null-move, LMR), Evaluator, OpeningBook, ChessAI (IChessEngine)
+  AI/Uci/    moteur UCI externe (Stockfish) : UciProtocol (commandes, info, bestmove, niveaux), UciEngine (IChessEngine), ProcessUciTransport, FallbackEngine
   Game/
     Visuals/ pièces procédurales, plateau verre/abîme, matériaux néon, effets, ambiance URP (SceneAtmosphere)
     View/    BoardView : synchronise la vue 3D avec la partie (animations, surbrillances, picking)
@@ -49,7 +50,7 @@ tests/KevChess.Tests/  tests NUnit hors Unity (Core + AI)
 cd ~/dev/kevchess/tests/KevChess.Tests && DOTNET_CLI_TELEMETRY_OPTOUT=1 /Applications/Unity/Hub/Editor/6000.6.3f1/Unity.app/Contents/Resources/Scripting/DotNetSdk/dotnet test
 ```
 
-139 tests verts (≈ 12 s), dont 42 pour le mode Légendes (règles, équivalence perft avec le classique sans énergie, plateau vivant, sauvegarde, IA). Classique : perft sur 6 positions de référence (jusqu'à profondeur 5), roque, en passant, promotion, clouage, mat, pat, 50 coups, triple répétition, matériel insuffisant, SAN, PGN, hachage incrémental ; IA : mats en 1/2, pas de dame en prise, pat évité, coups légaux, limite de temps, annulation, symétrie de l'évaluation, Maître bat Débutant.
+341 tests verts (≈ 30 s ; 297 avant l'adaptateur UCI, 44 tests UCI ajoutés le 2026-11-21), dont 42 pour le mode Légendes (règles, équivalence perft avec le classique sans énergie, plateau vivant, sauvegarde, IA). Classique : perft sur 6 positions de référence (jusqu'à profondeur 5), roque, en passant, promotion, clouage, mat, pat, 50 coups, triple répétition, matériel insuffisant, SAN, PGN, hachage incrémental ; IA : mats en 1/2, pas de dame en prise, pat évité, coups légaux, limite de temps, annulation, symétrie de l'évaluation, Maître bat Débutant.
 
 Perf IA (Mac, .NET) : ~1,1–1,5 M nœuds/s, profondeur 10 en < 1 s depuis la position initiale.
 
@@ -72,6 +73,24 @@ Logique (Core/AI, testée) : horloge `ChessClock` + cadences `TimeControl.Preset
 Visuels et son : 4 thèmes `VisualTheme` (Néon, Aurore, Émeraude, Glace & Braise) + lisibilité renforcée ; animation de mat (roi qui bascule et se brise, onde de choc, étincelles) ; flèche 3D d'indice ; cavalier qui saute en arc, traînées lumineuses ; `BoardView.AnimationSpeed` ; musique d'ambiance générative `AmbientMusic` (coupée par défaut) ; sons roque, promotion, mat, chute, tic d'horloge, puzzle.
 Interface : horloge dans les cartes (alerte sous 10 s) et choix de la cadence ; mode revue ⏮ ◀ ▶ ⏭ (+ « Reprendre d'ici ») ; écran d'analyse (toucher une gaffe → revue avec flèche du meilleur coup) ; puzzles (liste, progression, indice, suivant) ; Réglages (son, vibrations, thème, lisibilité, notation, vitesse, musique + volume, caméra qui se retourne en partie à deux) ; statistiques par niveau d'IA ; proposer nulle ; copier le PGN ; « L'IA réfléchit… » ; nom de l'ouverture. Actions secondaires dans « Plus… » (barre du bas).
 Vérifié : 195 tests (avant fusion des Légendes), autotest Mac étendu vert (revue, analyse, mat animé, chute au temps, nulle, PGN, puzzle juste et faux, changement de thème, partie 3+2 contre l'IA), captures en portrait regardées. Android (A17, APK depuis main avec les Légendes) : nouveau menu (Légendes, Puzzles, Réglages), liste des puzzles, puzzle 1 résolu au glisser (Ta8#, « Résolu ! »). Corrigé après cette recette : en puzzle, les rangées de pièces prises montraient toutes les pièces absentes du jeu complet ; elles comptent maintenant depuis la position de départ de la partie (`BoardView.SetTrayBaseline`). Non vérifié : sons et musique à l'oreille (synthétisés, jamais écoutés), recette tactile complète des nouveaux écrans sur téléphone.
+
+## Stockfish (V1.1, 2026-11-21)
+
+Fait (C# pur dans `AI/Uci`, testé hors Unity avec un faux moteur UCI en mémoire et un faux moteur en shell lancé comme processus) :
+- `UciProtocol` : `position startpos|fen ... moves ...` (l'historique est envoyé : le moteur voit les répétitions), `go movetime` / `go depth` / `go wtime btime winc binc`, `setoption`, lecture de `bestmove` (avec `ponder`, `(none)`) et de `info` (profondeur, score cp ou mat ramené à l'échelle de `Searcher`, bornes ignorées, nœuds, nps, temps, variante, `info string`).
+- `UciEngine : IChessEngine` : poignée de main (`uci`/`uciok`, `Threads` 1, `Hash` 16 Mo, `isready`), `ucinewgame` à chaque nouvelle partie, `Skill Level` selon le niveau, annulation par `stop` en restant synchronisé, `stop` forcé si le moteur dépasse son temps (+1,5 s), moteur muet ou arrêté → hors service. Coup illégal refusé.
+- `FallbackEngine` : si Stockfish manque, échoue ou rend un coup nul en cours de partie, l'IA maison joue le coup. L'indice et la proposition de nulle restent à l'IA maison.
+- Réglage « Moteur de l'IA » (Réglages, `GamePrefs.Engine`, clé `kevchess.engine`) : KevChess (intégrée, **par défaut**) ou Stockfish ; affiche « Stockfish absent : KevChess » sans binaire.
+- `AIAdapter` cherche le binaire (Mac / PC seulement) : argument `-kevchess-stockfish <chemin>`, variable `KEVCHESS_STOCKFISH`, ou `StreamingAssets/stockfish/stockfish[.exe]`. Essai sur Mac : `brew install stockfish` puis lancer l'app avec `-kevchess-stockfish /opt/homebrew/bin/stockfish`.
+
+Niveaux Stockfish (valeurs de départ, `UciProtocol.Levels`) : même temps que l'IA maison (300 / 500 / 900 / 1500 / 3000 ms) ; `Skill Level` 0 / 3 / 8 / 14 / 20 ; profondeur max 1 et 3 pour Débutant et Facile.
+
+Non exécuté : le code Unity (`AIAdapter`, `GamePrefs`, écran Réglages) n'a été compilé que contre les assemblies de référence Unity (NuGet) hors éditeur, sans lancer le jeu ni un vrai Stockfish.
+
+Reste à faire, **avec l'accord de Kevin** (non intégré) :
+- **Binaire Android** : compiler Stockfish pour arm64 avec le NDK (`make -j build ARCH=armv8-dotprod COMP=ndk` dans `src/`, ou `armv8` pour les puces sans dotprod), le renommer `libstockfish.so` et le placer dans `Assets/Plugins/Android/libs/arm64-v8a/` avec `android:extractNativeLibs="true"` pour qu'il soit extrait, exécutable, dans `nativeLibraryDir`. `System.Diagnostics.Process` n'est pas utilisable sous IL2CPP Android : il faut un petit transport `IUciTransport` qui lance le binaire avec `java.lang.ProcessBuilder` (via `AndroidJavaObject`, ou une classe Java de quelques dizaines de lignes dans `Plugins/Android`) et lit sa sortie dans un thread. Alternative plus lourde : Stockfish en bibliothèque partagée avec ses entrées / sorties redirigées et appelée par P/Invoke. iOS interdit de lancer un exécutable : seule la bibliothèque liée y est possible.
+- **Licence** : Stockfish est sous GPL v3. Distribuer l'APK avec le binaire oblige à fournir le code source de Stockfish (lien vers la version exacte), le texte de la GPL et la mention des auteurs dans l'app (écran « À propos »). Lancé comme processus séparé et dialoguant par UCI, Stockfish reste un programme distinct ; lié comme bibliothèque, toute l'app devrait être sous GPL. Kevin a accepté la GPL pour un usage perso (tableau des décisions).
+- **Poids** : le binaire arm64 de Stockfish 16–17 embarque ses réseaux NNUE et pèse environ 40 à 80 Mo selon la version (à mesurer sur la version choisie), soit plus que l'APK actuel (31–36 Mo). Pistes pour réduire : charger le réseau depuis un fichier compressé à part, ou une version plus ancienne / plus légère (évaluation classique, quelques Mo, beaucoup moins forte mais bien au-dessus des niveaux du jeu).
 
 ## Auto-parties du mode Légendes (2026-11-21)
 
@@ -127,7 +146,7 @@ Pièges rencontrés :
 - [ ] Revoir sur le S24 : portrait, pièces prises, temps IA
 - [x] Pièces prises en portrait : rangée proche lisible (plus grosse, penchée pour montrer son profil)
 - [ ] Module iOS + build Xcode
-- [ ] V1.1 : Stockfish via `IChessEngine` (AIAdapter est le seul point à changer)
+- [ ] V1.1 : Stockfish via `IChessEngine` : adaptateur UCI et réglage « Moteur de l'IA » faits (2026-11-21, voir « Stockfish (V1.1) ») ; reste le binaire Android, à décider par Kevin
 - [x] Glisser-déposer, pièces prises en 3D, vibrations
 - [ ] Mode Légendes (`docs/design/mode-fantastique.md`) : **fusionné dans `main`** (la branche `feature/legendes` n'a plus aucun commit d'avance, vérifié le 2026-11-21 ; ses tests passent avec le reste). Il reste l'équilibrage (décision de Kevin, voir « Auto-parties du mode Légendes ») et la recette S24. Historique : règles, plateau vivant, IA, personnages procéduraux, duels de capture, plateau vivant visuel et interface faits ; bouton « Légendes » dans le menu. Recette : `-kevchess-legends-autotest <dossier>`. Recette Android 2026-11-02 sur le Galaxy A17 (APK IL2CPP 36 Mo) : autotest Légendes vert (duel, invocation, Bouclier, Gel, téléportation, plateau vivant, partie contre l'IA ; IA Moyen profondeur 5 en ≈ 0,2 s par coup). Sur Android, `-kevchess-legends-autotest` se passe par `adb shell am start ... -e unity "-kevchess-legends-autotest"` ; ses captures restent dans le stockage privé de l'app (non debuggable) : faire des `adb exec-out screencap` pendant le test. À revoir : plateau petit en portrait sur l'A17 (barre des pouvoirs en plus du bandeau). Reste : S24, équilibrage par auto-parties IA contre IA, retouches visuelles (chevalier, sentinelle, reflets des personnages). IA : profondeur 9 en 0,5 s au départ (classique 10), 6 en milieu de partie avec pouvoirs
 - [x] Horloge, thèmes, analyse de partie, export PGN, puzzles, réglages (les 20 améliorations)
