@@ -13,14 +13,24 @@ namespace KevChess.AI.Uci
         /// <summary>Commit du tag officiel sf_19 (official-stockfish/Stockfish).</summary>
         public const string Commit = "edb0d9db6731067ec50ce619ff372b463bc4dd5d";
 
-        /// <summary>Archive officielle de la release, qui contient le binaire et son code source (dossier src/).</summary>
-        public const string ReleaseAsset =
-            "https://github.com/official-stockfish/Stockfish/releases/download/" + Tag + "/stockfish-android-arm64-universal.tar.gz";
-        public const string ReleaseAssetSha256 = "ebb24051aa4a222b4daaf049b882ecf1163d370c128fe02316602643f4d5e426";
+        /// <summary>
+        /// Le binaire est recompilé depuis ce code source, avec la recette de la release officielle
+        /// stockfish-android-arm64-universal (NDK r27c, ARCH=arm64-universal, PGO, réseau intégré), plus
+        /// -Wl,-z,max-page-size=16384 à l'édition de liens finale : segments ELF alignés sur 16 Kio
+        /// (exigence Google Play). Script reproductible : tools/build-stockfish-android.sh.
+        /// </summary>
+        public const string BuildScript = "tools/build-stockfish-android.sh";
+        public const string BuildArch = "arm64-universal";
+        public const string NdkVersion = "27.2.12479018";
+        public const int PageAlignment = 16384;
+        /// <summary>Réseau NNUE intégré au binaire (celui du tag sf_19).</summary>
+        public const string Network = "nn-1a298aa575a0.nnue";
+        /// <summary>Signature « bench » du tag sf_19, vérifiée sous qemu par le script de build.</summary>
+        public const long BenchSignature = 2497913;
 
-        /// <summary>Binaire extrait de l'archive (stockfish-android-arm64-universal), renommé libstockfish.so.</summary>
-        public const string BinarySha256 = "ffd8fc2004d3d19f9fdab95d84c92709aea92e8d3af405eda0b281b23cf1daf8";
-        public const long BinarySize = 100695968;
+        /// <summary>Binaire produit par le script, renommé libstockfish.so.</summary>
+        public const string BinarySha256 = "887b58a0409044ff1c3caa200011686d6ca9ac0f5ab92a981331861aab2231eb";
+        public const long BinarySize = 100683680;
 
         /// <summary>Code source correspondant exactement au binaire embarqué.</summary>
         public const string SourceUrl = "https://github.com/official-stockfish/Stockfish/tree/" + Tag;
@@ -31,7 +41,8 @@ namespace KevChess.AI.Uci
 
         /// <summary>Texte de l'écran « Licences ».</summary>
         public static string Notice =>
-            "KevChess intègre " + Version + " (binaire officiel Android arm64, variante universelle), "
+            "KevChess intègre " + Version + " (Android arm64, variante universelle, compilé sans modification "
+            + "depuis le code source officiel, segments alignés sur 16 Kio), "
             + "moteur d'échecs libre écrit par les auteurs de Stockfish "
             + "(liste : fichier AUTHORS du code source).\n\n"
             + "Stockfish est distribué sous la " + LicenseName + ", sans aucune garantie. "
@@ -40,6 +51,7 @@ namespace KevChess.AI.Uci
             + "Code source exact de la version embarquée (tag " + Tag + ", commit " + Commit.Substring(0, 12) + ") :\n"
             + SourceUrl + "\n\n"
             + "Texte de la licence : " + LicenseUrl + "\n"
-            + "(aussi dans le dépôt du jeu : LICENSES/GPL-3.0.txt et THIRD_PARTY_NOTICES.md)";
+            + "(aussi dans le dépôt du jeu : LICENSES/GPL-3.0.txt et THIRD_PARTY_NOTICES.md ; "
+            + "options de compilation et script de build : " + BuildScript + ")";
     }
 }
