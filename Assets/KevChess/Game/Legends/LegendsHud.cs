@@ -617,7 +617,7 @@ namespace KevChess.Game.Legends
             var rules = UIKit.Panel("Rules", card, SurfaceSoft, true, Border);
             UIKit.Size(rules, 215);
             var rulesText = UIKit.Label("Text", rules.transform,
-                "Les règles essentielles\n•  Un pouvoir (Bouclier, Gel), puis votre coup.\n•  Le Saut et le Souffle remplacent votre coup.\n•  À 10 éclats, une tour devient dragon (une fois par partie).\n•  Fissures et portails sont annoncés avant d'agir.",
+                "Les règles essentielles\n•  Un pouvoir (Bouclier, Gel), puis votre coup.\n•  Le Saut et le Souffle remplacent votre coup.\n•  À " + FantasyConfig.Default.SummonCost + " éclats, une tour devient dragon (une fois par partie).\n•  Fissures et portails sont annoncés avant d'agir.",
                 28, UIKit.Text, TextAnchor.UpperLeft);
             UIKit.Stretch(rulesText.rectTransform, 30, 20, 30, 20);
             rulesText.lineSpacing = 1.15f;

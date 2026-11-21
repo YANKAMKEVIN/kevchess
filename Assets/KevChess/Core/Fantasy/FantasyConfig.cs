@@ -12,7 +12,8 @@ namespace KevChess.Core.Fantasy
         public int ShieldCost = 2;
         public int FreezeCost = 3;
         public int TeleportCost = 3;
-        public int SummonCost = 10;
+        /// <summary>Coût de l'invocation du dragon : 10 (jauge pleine) jusqu'au 2026-11-21, 5 après les auto-parties (≈ 1 invocation par partie).</summary>
+        public int SummonCost = 5;
 
         /// <summary>Éclats gagnés en prenant une pièce, indexés par type (0, pion, cavalier, fou, tour, dame, roi, dragon).</summary>
         public int[] CaptureGain = { 0, 1, 2, 2, 2, 3, 0, 4 };
