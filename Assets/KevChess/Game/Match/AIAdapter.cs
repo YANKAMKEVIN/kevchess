@@ -36,14 +36,26 @@ namespace KevChess.Game.Match
             !stockfishStartFailed && (stockfish == null ? StockfishPath() != null : !stockfish.IsBroken);
 
         /// <summary>
-        /// Chemin d'un exécutable Stockfish : argument « -kevchess-stockfish &lt;chemin&gt; », variable KEVCHESS_STOCKFISH,
-        /// ou StreamingAssets/stockfish/stockfish (Mac, Linux, Windows avec « .exe »). Aucun binaire n'est livré
-        /// avec le jeu (licence GPL, accord de Kevin requis) ; sur Android, null (voir docs/tech/etat-projet.md).
+        /// Chemin d'un exécutable Stockfish.
+        /// Android : le binaire livré dans l'APK comme bibliothèque native (libstockfish.so dans nativeLibraryDir,
+        /// voir docs/tech/etat-projet.md, « Stockfish »). iOS : null (lancer un exécutable y est interdit).
+        /// Mac, Linux, Windows et éditeur : argument « -kevchess-stockfish &lt;chemin&gt; », variable KEVCHESS_STOCKFISH,
+        /// ou StreamingAssets/stockfish/stockfish (« .exe » sous Windows).
         /// </summary>
         public static string StockfishPath()
         {
-#if UNITY_ANDROID || UNITY_IOS
+#if UNITY_IOS && !UNITY_EDITOR
             return null;
+#elif UNITY_ANDROID && !UNITY_EDITOR
+            if (!androidPathResolved)
+            {
+                androidPathResolved = true;
+                var dir = AndroidUciTransport.NativeLibraryDir();
+                var path = dir == null ? null : Path.Combine(dir, AndroidStockfishLibrary);
+                androidPath = path != null && File.Exists(path) ? path : null;
+                if (androidPath == null) Debug.LogWarning("[KevChess] Stockfish absent de l'APK (" + (path ?? "nativeLibraryDir inconnu") + ")");
+            }
+            return androidPath;
 #else
             var args = Environment.GetCommandLineArgs();
             for (int i = 0; i + 1 < args.Length; i++)
@@ -57,6 +69,27 @@ namespace KevChess.Game.Match
 #endif
         }
 
+        /// <summary>Nom du binaire Stockfish dans nativeLibraryDir (Assets/Plugins/Android/libs/arm64-v8a/).</summary>
+        public const string AndroidStockfishLibrary = "libstockfish.so";
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+        static bool androidPathResolved;
+        static string androidPath;
+
+        /// <summary>Résout le chemin sur le fil principal (appels Java), avant tout coup joué sur un fil de fond.</summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        static void ResolveAndroidPath() => StockfishPath();
+#endif
+
+        static IUciTransport OpenTransport(string path)
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            return new AndroidUciTransport(path);
+#else
+            return new ProcessUciTransport(path);
+#endif
+        }
+
         static IChessEngine Stockfish()
         {
             if (stockfish != null && !stockfish.IsBroken) return stockfish;
@@ -65,7 +98,7 @@ namespace KevChess.Game.Match
             if (path == null) return null;
             try
             {
-                stockfish = new UciEngine(new ProcessUciTransport(path), hashMb: 16, threads: 1);
+                stockfish = new UciEngine(OpenTransport(path), hashMb: 16, threads: 1);
                 Application.quitting += Shutdown;
                 return stockfish;
             }

@@ -22,7 +22,7 @@ namespace KevChess.AI.Uci
     /// <summary>
     /// Moteur UCI lancé comme un processus (Mac, Linux, Windows, tests). Une tâche de fond lit la sortie standard
     /// ligne par ligne. Sur Android, lancer un exécutable demande un binaire placé dans les bibliothèques natives
-    /// de l'APK (voir docs/tech/etat-projet.md, « Stockfish ») : ce transport n'y est pas utilisé tel quel.
+    /// de l'APK (voir docs/tech/etat-projet.md, « Stockfish ») : sur Android, c'est AndroidUciTransport (Game/Match).
     /// </summary>
     public sealed class ProcessUciTransport : IUciTransport
     {

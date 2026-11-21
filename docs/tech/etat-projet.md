@@ -12,7 +12,8 @@ Dépôt : https://github.com/YANKAMKEVIN/kevchess (privé).
 |---|---|
 | Moteur | Unity 6000.6.3f1 + URP (installé dans `/Applications/Unity/Hub/Editor/6000.6.3f1`, modules Android + Mac ; module iOS à ajouter) |
 | Modes V1 | Local 2 joueurs + IA maison (5 niveaux) |
-| Plus tard | Stockfish embarqué en V1.1 (usage perso, GPL acceptée), jeu en ligne en V2 |
+| Stockfish | **Intégré à l'APK Android le 2026-11-21** (décision de Kevin, en connaissance de cause : GPL v3, poids) ; l'IA maison reste le moteur par défaut, Stockfish se choisit dans les Réglages |
+| Plus tard | Jeu en ligne en V2 |
 | DA | Cristal / néon futuriste, la 3D doit se ressentir (perspective, reflets, ombres, bloom, parallaxe) |
 | Caméra | Orbite libre (glisser), pincer/molette = zoom, double-tap = recentrer ; bouton « Vue » |
 | Contrôles | Toucher une pièce puis une case (coups légaux surlignés), ou glisser-déposer la pièce ; un geste commencé hors d'une pièce jouable fait tourner la caméra |
@@ -24,11 +25,11 @@ Dépôt : https://github.com/YANKAMKEVIN/kevchess (privé).
 Assets/KevChess/
   Core/      règles pures (C#, sans UnityEngine) : Position, MoveGenerator, ChessGame, Notation (SAN/UCI), FEN, PGN
   AI/        IA pure : Searcher (alpha-bêta, TT, quiescence, null-move, LMR), Evaluator, OpeningBook, ChessAI (IChessEngine)
-  AI/Uci/    moteur UCI externe (Stockfish) : UciProtocol (commandes, info, bestmove, niveaux), UciEngine (IChessEngine), ProcessUciTransport, FallbackEngine
+  AI/Uci/    moteur UCI externe (Stockfish) : UciProtocol (commandes, info, bestmove, niveaux), UciEngine (IChessEngine), ProcessUciTransport, FallbackEngine, StockfishBundle (version, empreintes, notice GPL du binaire Android)
   Game/
     Visuals/ pièces procédurales, plateau verre/abîme, matériaux néon, effets, ambiance URP (SceneAtmosphere)
     View/    BoardView : synchronise la vue 3D avec la partie (animations, surbrillances, picking)
-    Match/   MatchController (tours humain/IA, annulation, indice, sauvegarde PlayerPrefs), BoardInteraction, AIAdapter
+    Match/   MatchController (tours humain/IA, annulation, indice, sauvegarde PlayerPrefs), BoardInteraction, AIAdapter, AndroidUciTransport (Stockfish lancé par ProcessBuilder)
     Input/   PointerInput (tactile EnhancedTouch + souris → tap / double-tap / glisser / pincer)
     Camera/  OrbitCamera (orbite lissée, cadrage portrait/paysage, respiration, parallaxe accéléromètre)
     UI/      Hud (uGUI construit par code : bandeau joueurs + horloge, statut, coups, ouverture, menu, IA, promotion, fin de partie), Hud.Screens (réglages, puzzles, analyse, statistiques, nulle), Hud.Review (mode revue), GamePrefs (préférences PlayerPrefs)
@@ -50,7 +51,7 @@ tests/KevChess.Tests/  tests NUnit hors Unity (Core + AI)
 cd ~/dev/kevchess/tests/KevChess.Tests && DOTNET_CLI_TELEMETRY_OPTOUT=1 /Applications/Unity/Hub/Editor/6000.6.3f1/Unity.app/Contents/Resources/Scripting/DotNetSdk/dotnet test
 ```
 
-342 tests verts (≈ 30 s ; 297 avant l'adaptateur UCI, 44 tests UCI ajoutés le 2026-11-21, 1 pour le coût du dragon), dont 42 pour le mode Légendes (règles, équivalence perft avec le classique sans énergie, plateau vivant, sauvegarde, IA). Classique : perft sur 6 positions de référence (jusqu'à profondeur 5), roque, en passant, promotion, clouage, mat, pat, 50 coups, triple répétition, matériel insuffisant, SAN, PGN, hachage incrémental ; IA : mats en 1/2, pas de dame en prise, pat évité, coups légaux, limite de temps, annulation, symétrie de l'évaluation, Maître bat Débutant.
+345 tests verts (≈ 30 s ; 297 avant l'adaptateur UCI, 44 tests UCI ajoutés le 2026-11-21, 1 pour le coût du dragon, 3 pour le binaire Stockfish embarqué et ses licences), dont 42 pour le mode Légendes (règles, équivalence perft avec le classique sans énergie, plateau vivant, sauvegarde, IA). Classique : perft sur 6 positions de référence (jusqu'à profondeur 5), roque, en passant, promotion, clouage, mat, pat, 50 coups, triple répétition, matériel insuffisant, SAN, PGN, hachage incrémental ; IA : mats en 1/2, pas de dame en prise, pat évité, coups légaux, limite de temps, annulation, symétrie de l'évaluation, Maître bat Débutant.
 
 Perf IA (Mac, .NET) : ~1,1–1,5 M nœuds/s, profondeur 10 en < 1 s depuis la position initiale.
 
@@ -81,16 +82,22 @@ Fait (C# pur dans `AI/Uci`, testé hors Unity avec un faux moteur UCI en mémoir
 - `UciEngine : IChessEngine` : poignée de main (`uci`/`uciok`, `Threads` 1, `Hash` 16 Mo, `isready`), `ucinewgame` à chaque nouvelle partie, `Skill Level` selon le niveau, annulation par `stop` en restant synchronisé, `stop` forcé si le moteur dépasse son temps (+1,5 s), moteur muet ou arrêté → hors service. Coup illégal refusé.
 - `FallbackEngine` : si Stockfish manque, échoue ou rend un coup nul en cours de partie, l'IA maison joue le coup. L'indice et la proposition de nulle restent à l'IA maison.
 - Réglage « Moteur de l'IA » (Réglages, `GamePrefs.Engine`, clé `kevchess.engine`) : KevChess (intégrée, **par défaut**) ou Stockfish ; affiche « Stockfish absent : KevChess » sans binaire.
-- `AIAdapter` cherche le binaire (Mac / PC seulement) : argument `-kevchess-stockfish <chemin>`, variable `KEVCHESS_STOCKFISH`, ou `StreamingAssets/stockfish/stockfish[.exe]`. Essai sur Mac : `brew install stockfish` puis lancer l'app avec `-kevchess-stockfish /opt/homebrew/bin/stockfish`.
+- `AIAdapter` cherche le binaire. Mac / PC / éditeur : argument `-kevchess-stockfish <chemin>`, variable `KEVCHESS_STOCKFISH`, ou `StreamingAssets/stockfish/stockfish[.exe]` (essai sur Mac : `brew install stockfish` puis `-kevchess-stockfish /opt/homebrew/bin/stockfish`). Android : `nativeLibraryDir/libstockfish.so` (ci-dessous). iOS : aucun (lancer un exécutable y est interdit).
 
 Niveaux Stockfish (valeurs de départ, `UciProtocol.Levels`) : même temps que l'IA maison (300 / 500 / 900 / 1500 / 3000 ms) ; `Skill Level` 0 / 3 / 8 / 14 / 20 ; profondeur max 1 et 3 pour Débutant et Facile.
 
-Non exécuté : le code Unity (`AIAdapter`, `GamePrefs`, écran Réglages) n'a été compilé que contre les assemblies de référence Unity (NuGet) hors éditeur, sans lancer le jeu ni un vrai Stockfish.
+### Stockfish dans l'APK Android (2026-11-21, décision de Kevin)
 
-Reste à faire, **avec l'accord de Kevin** (non intégré) :
-- **Binaire Android** : compiler Stockfish pour arm64 avec le NDK (`make -j build ARCH=armv8-dotprod COMP=ndk` dans `src/`, ou `armv8` pour les puces sans dotprod), le renommer `libstockfish.so` et le placer dans `Assets/Plugins/Android/libs/arm64-v8a/` avec `android:extractNativeLibs="true"` pour qu'il soit extrait, exécutable, dans `nativeLibraryDir`. `System.Diagnostics.Process` n'est pas utilisable sous IL2CPP Android : il faut un petit transport `IUciTransport` qui lance le binaire avec `java.lang.ProcessBuilder` (via `AndroidJavaObject`, ou une classe Java de quelques dizaines de lignes dans `Plugins/Android`) et lit sa sortie dans un thread. Alternative plus lourde : Stockfish en bibliothèque partagée avec ses entrées / sorties redirigées et appelée par P/Invoke. iOS interdit de lancer un exécutable : seule la bibliothèque liée y est possible.
-- **Licence** : Stockfish est sous GPL v3. Distribuer l'APK avec le binaire oblige à fournir le code source de Stockfish (lien vers la version exacte), le texte de la GPL et la mention des auteurs dans l'app (écran « À propos »). Lancé comme processus séparé et dialoguant par UCI, Stockfish reste un programme distinct ; lié comme bibliothèque, toute l'app devrait être sous GPL. Kevin a accepté la GPL pour un usage perso (tableau des décisions).
-- **Poids** : le binaire arm64 de Stockfish 16–17 embarque ses réseaux NNUE et pèse environ 40 à 80 Mo selon la version (à mesurer sur la version choisie), soit plus que l'APK actuel (31–36 Mo). Pistes pour réduire : charger le réseau depuis un fichier compressé à part, ou une version plus ancienne / plus légère (évaluation classique, quelques Mo, beaucoup moins forte mais bien au-dessus des niveaux du jeu).
+- **Binaire** : Stockfish **19** (release officielle `sf_19` du 2026-09-05, la plus récente), archive `stockfish-android-arm64-universal.tar.gz`. Depuis Stockfish 19 il n'y a plus de choix armv8 / armv8-dotprod pour Android : la variante « universelle » choisit à l'exécution, c'est la plus compatible. Aucun fichier de sommes de contrôle trouvé à côté des archives, et l'API GitHub (qui expose l'empreinte de chaque archive) n'est pas joignable d'ici : empreinte publiée non vérifiée : empreintes SHA-256 relevées au téléchargement et figées dans `THIRD_PARTY_NOTICES.md`, `StockfishBundle` et un test (archive `ebb24051…e426`, binaire `ffd8fc20…1daf8`).
+- **Format vérifié** : `ELF 64-bit LSB executable, ARM aarch64, statically linked, stripped`, **100 695 968 octets (96 Mio)**, réseaux NNUE inclus. Segments alignés sur 4 Kio.
+- **Place** : `Assets/Plugins/Android/libs/arm64-v8a/libstockfish.so` (importé comme plugin Android ARM64). Android extrait les bibliothèques natives, exécutables, dans `nativeLibraryDir` : c'est le seul endroit d'où l'app peut lancer un binaire (depuis Android 10, un fichier copié dans les données de l'app n'est plus exécutable). Pour que l'extraction ait lieu, `Editor/StockfishAndroidPackaging` (après génération du projet Gradle) met `packagingOptions.jniLibs.useLegacyPackaging = true` dans le module launcher.
+- **Lancement** : `AndroidUciTransport` (`Game/Match`) lance le binaire par `java.lang.ProcessBuilder` (`System.Diagnostics.Process` n'existe pas sous IL2CPP Android) ; deux fils dédiés, attachés à la JVM, écrivent les commandes et lisent la sortie. `AIAdapter` résout le chemin au démarrage (fil principal) et branche ce transport dans `UciEngine`. Binaire absent, refusé ou planté → « Stockfish absent : KevChess » dans les Réglages et l'IA maison joue (`FallbackEngine`, déjà en place).
+- **Git** : le dépôt n'utilise pas Git LFS (aucun `.gitattributes`) ; le binaire est donc commité tel quel, sans règle LFS ajoutée. 96 Mio passent sous la limite GitHub de 100 Mio par fichier, mais chaque mise à jour du binaire alourdit l'historique d'autant : pour en changer souvent, passer ce fichier en LFS.
+- **Poids** : l'APK grossit d'environ 75 à 80 Mo (le binaire compressé dans l'APK ; 96 Mio une fois installé, extrait sur le téléphone), soit plus que les 31–36 Mo actuels.
+- **Licence (GPL v3)** : texte de la licence dans `LICENSES/GPL-3.0.txt`, auteurs dans `LICENSES/Stockfish-AUTHORS.txt`, notice et lien vers le code source exact (`https://github.com/official-stockfish/Stockfish/tree/sf_19`, commit `edb0d9db6731`) dans `THIRD_PARTY_NOTICES.md` et dans l'app : Réglages → « Licences (Stockfish, GPL v3) » (nouvel écran, il n'y avait pas d'écran « À propos »).
+- **⚠ Pour Kevin : l'application entière, distribuée avec Stockfish, relève de la GPL v3.** Toute personne qui reçoit l'APK (même un ami à qui tu l'envoies) a droit au code source complet, Stockfish **et KevChess**, sous GPL v3, et peut le redistribuer. Le dépôt KevChess est privé aujourd'hui : avant de distribuer l'APK hors usage personnel, il faudra publier (ou fournir sur demande) le code de KevChess sous GPL v3, ou retirer Stockfish de l'APK.
+- **Non vérifié** (ni Unity ni Android ici) : build Unity avec le plugin, extraction réelle dans `nativeLibraryDir`, lancement et partie contre Stockfish sur téléphone, écran « Licences ». Vérifié : format du binaire, empreintes, compilation hors moteur du code Unity (assemblies de référence, Android et Mac), patch Gradle sur des fichiers d'exemple, suite de tests.
+- **À surveiller** : Google Play exige pour les nouvelles versions des bibliothèques natives alignées sur 16 Kio ; ce binaire est aligné sur 4 Kio (sans importance pour une installation directe sur l'A17 ou le S24, à revoir avant une publication sur le Play Store, de même que sur un appareil à pages de 16 Kio).
 
 ## Auto-parties du mode Légendes (2026-11-21)
 
@@ -148,7 +155,7 @@ Pièges rencontrés :
 - [ ] Revoir sur le S24 : portrait, pièces prises, temps IA
 - [x] Pièces prises en portrait : rangée proche lisible (plus grosse, penchée pour montrer son profil)
 - [ ] Module iOS + build Xcode
-- [ ] V1.1 : Stockfish via `IChessEngine` : adaptateur UCI et réglage « Moteur de l'IA » faits (2026-11-21, voir « Stockfish (V1.1) ») ; reste le binaire Android, à décider par Kevin
+- [x] V1.1 : Stockfish via `IChessEngine` : adaptateur UCI, réglage « Moteur de l'IA » et binaire Android (Stockfish 19) intégrés le 2026-11-21 (voir « Stockfish (V1.1) ») ; reste l'essai sur téléphone
 - [x] Glisser-déposer, pièces prises en 3D, vibrations
 - [ ] Mode Légendes (`docs/design/mode-fantastique.md`) : **fusionné dans `main`** (la branche `feature/legendes` n'a plus aucun commit d'avance, vérifié le 2026-11-21 ; ses tests passent avec le reste). Équilibrage : coût de l'invocation du dragon baissé de 10 à 5 le 2026-11-21 (décision de Kevin, voir « Auto-parties du mode Légendes ») ; il reste la recette S24. Historique : règles, plateau vivant, IA, personnages procéduraux, duels de capture, plateau vivant visuel et interface faits ; bouton « Légendes » dans le menu. Recette : `-kevchess-legends-autotest <dossier>`. Recette Android 2026-11-02 sur le Galaxy A17 (APK IL2CPP 36 Mo) : autotest Légendes vert (duel, invocation, Bouclier, Gel, téléportation, plateau vivant, partie contre l'IA ; IA Moyen profondeur 5 en ≈ 0,2 s par coup). Sur Android, `-kevchess-legends-autotest` se passe par `adb shell am start ... -e unity "-kevchess-legends-autotest"` ; ses captures restent dans le stockage privé de l'app (non debuggable) : faire des `adb exec-out screencap` pendant le test. À revoir : plateau petit en portrait sur l'A17 (barre des pouvoirs en plus du bandeau). Reste : S24, équilibrage par auto-parties IA contre IA, retouches visuelles (chevalier, sentinelle, reflets des personnages). IA : profondeur 9 en 0,5 s au départ (classique 10), 6 en milieu de partie avec pouvoirs
 - [x] Horloge, thèmes, analyse de partie, export PGN, puzzles, réglages (les 20 améliorations)
