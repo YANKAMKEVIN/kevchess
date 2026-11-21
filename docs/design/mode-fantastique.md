@@ -4,7 +4,7 @@ Nom à l'écran : **Légendes**. Dans le code et les documents techniques, on ga
 
 Statut : **validé par Kevin le 2026-10-31** ; questions de la section 7 tranchées le même jour.
 
-Dernière mise à jour : 2026-10-31.
+Dernière mise à jour : 2026-11-21 (coût de l'invocation du dragon : 10 → 5, § 6).
 
 ## 1. Intention
 
@@ -74,7 +74,7 @@ seule **action**, c'est l'unité que jouent l'interface, l'IA et l'annulation.
 | **Bouclier** | 2 | Une de ses pièces, sauf le roi | Jusqu'au début de son prochain tour, la pièce ne peut pas être prise (ni par un coup, ni par le Souffle). Elle bouge, attaque et donne échec normalement |
 | **Gel** | 3 | Une pièce adverse, sauf le roi | La pièce ne peut pas bouger pendant le prochain tour adverse (ni coup, ni Téléportation, ni Souffle pour un dragon). **Elle continue de contrôler ses cases** : elle donne échec et défend. Elle peut être prise |
 | **Téléportation** | 3 | Une de ses pièces, sauf le roi | Remplace le coup : la pièce saute sur une **case vide voisine** (8 directions). Jamais de prise. Un pion ne peut pas arriver sur la 1re ou la 8e rangée |
-| **Invocation du dragon** | 10 (jauge pleine) | Une de ses tours | La tour devient un dragon sur sa case, puis on joue son coup normalement (on peut bouger le dragon tout de suite). **Une invocation par camp et par partie** |
+| **Invocation du dragon** | 5 (10, jauge pleine, avant le 2026-11-21) | Une de ses tours | La tour devient un dragon sur sa case, puis on joue son coup normalement (on peut bouger le dragon tout de suite). **Une invocation par camp et par partie** |
 
 Précisions :
 - Le Gel ne retire pas un échec (la pièce gelée contrôle toujours ses cases). Le seul moyen de parer un
@@ -204,7 +204,7 @@ l'IA, l'IA réfléchit pendant le duel.
 | Gouffre | La dalle tombe dans l'abîme, vide sombre avec braises, bord lumineux |
 | Portails | Deux anneaux violets qui tournent, tourbillon au centre ; traversée = aspiration puis éjection |
 | Gisement | Grappe de cristaux qui pousse ; récolte = éclats vers la jauge |
-| Jauge d'éclats | 10 segments de cristal par camp dans le bandeau joueur ; pleine = elle pulse (dragon disponible) |
+| Jauge d'éclats | 10 segments de cristal par camp dans le bandeau joueur ; elle pulse dès que le dragon est disponible (5 éclats, tant qu'il n'a pas été invoqué) |
 
 ## 4. Changements dans le code
 
@@ -321,7 +321,7 @@ Ces nombres sont un point de départ, ils seront ajustés à l'étape 8 :
 | Réglage | Départ |
 |---|---|
 | Jauge max / éclats au départ | 10 / 1 |
-| Coûts Bouclier / Gel / Téléportation / Invocation | 2 / 3 / 3 / 10 |
+| Coûts Bouclier / Gel / Téléportation / Invocation | 2 / 3 / 3 / **5** (Invocation à 10 jusqu'au 2026-11-21) |
 | Bonus de centre | +1 si au moins 2 cases centrales occupées par des pièces hors pions |
 | Portée du dragon / du Souffle | 3 / 3 |
 | Recharge du Souffle | 1 Souffle tous les 3 tours |
@@ -340,3 +340,30 @@ Ces nombres sont un point de départ, ils seront ajustés à l'étape 8 :
 
 Plus aucune question de conception n'est ouverte ; les nombres de la section 6 restent à équilibrer à
 l'étape 8.
+
+## 8. Équilibrage
+
+### 2026-11-21 : coût de l'invocation du dragon (décision de Kevin : le baisser)
+
+Constat : avec un coût de 10 (jauge pleine), l'IA dépensait ses éclats en Boucliers et Gels et
+n'invoquait le dragon que 0,2 fois par partie. Kevin a demandé environ **1 invocation par partie**.
+
+Mesure : auto-parties IA Fort contre IA Fort, 40 ms par action, graines fixes (test explicite
+`FantasyAITests.SummonCostSweep`, hors Unity). La recherche est limitée en temps : deux séries de la
+même configuration ne donnent pas exactement les mêmes chiffres.
+
+| Coût | Parties | Invocations / partie | Bouclier | Gel | Téléportation | Souffle | Longueur moy. (demi-coups) |
+|---|---|---|---|---|---|---|---|
+| 10 (avant) | 30 | 0,1 | 4,6 | 2,8 | 0,8 | 0,0 | 58 |
+| 8 | 30 | 0,3 | 5,3 | 2,4 | 0,6 | 0,1 | 52 |
+| 7 | 30 | 0,5 | 5,0 | 2,9 | 0,4 | 0,1 | 57 |
+| 6 | 30 + 60 | 0,7 puis 0,6 | 4,9 / 4,3 | 1,9 / 2,2 | 0,3 / 0,5 | 0,3 / 0,4 | 47 / 50 |
+| **5 (retenu)** | 30 + 60 | **1,3 puis 0,8 (≈ 1,0 sur 90 parties)** | 3,5 / 4,0 | 1,5 / 1,9 | 0,3 / 0,3 | 0,6 / 0,4 | 43 / 45 |
+| 4 | 30 | 1,4 | 3,3 | 1,4 | 0,2 | 1,5 | 42 |
+
+Choix : **5 éclats**, la moitié de la jauge (`FantasyConfig.SummonCost`). Le Bouclier et le Gel restent
+joués à chaque partie (4 et 2 fois environ, contre 4,6 et 2,8) ; la Téléportation, déjà rare, ne change
+guère ; le Souffle apparaît enfin. Les parties raccourcissent un peu (45 demi-coups contre 58) et restent
+équilibrées (blancs 32, noirs 28 sur 60 parties). À 4, le dragon arrive trop tôt et le Souffle prend le
+dessus. Le reste (une invocation par camp et par partie, jauge de 10) ne change pas. À confirmer en jouant.
+

@@ -184,16 +184,27 @@ namespace KevChess.Tests
         // ---------- Dragon ----------
 
         [Test]
+        public void SummonCostIsFiveSince20261121()
+        {
+            // Équilibrage du 2026-11-21 (auto-parties, docs/design/mode-fantastique.md § 6) : 10 → 5.
+            Assert.That(FantasyConfig.Default.SummonCost, Is.EqualTo(5));
+            Assert.That(FantasyConfig.Default.SummonCost, Is.LessThanOrEqualTo(FantasyConfig.Default.MaxEnergy));
+        }
+
+        [Test]
         public void SummonTurnsRookIntoDragonThenMoves()
         {
             var p = Pos("4k3/8/8/8/8/8/8/R3K3 w Q - 0 1");
-            p.SetEnergy(PieceColor.White, 10);
+            int cost = p.Config.SummonCost;
+            p.SetEnergy(PieceColor.White, cost - 1);
+            Assert.That(Legal(p).Any(a => a.Power == PowerKind.Summon), Is.False, "un éclat de moins que le coût");
+            p.SetEnergy(PieceColor.White, cost + 2);
             var summons = Legal(p).Where(a => a.Power == PowerKind.Summon).ToList();
             Assert.That(summons, Is.Not.Empty);
             var fly = summons.First(a => a.From == Sq("a1") && a.To == Sq("d4"));
             p.MakeAction(fly);
             Assert.That(p[Sq("d4")], Is.EqualTo(W(FantasyPiece.Dragon)));
-            Assert.That(p.Energy(PieceColor.White), Is.EqualTo(0));
+            Assert.That(p.Energy(PieceColor.White), Is.EqualTo(2), "le coût est payé, le reste est gardé");
             Assert.That(p.HasSummoned(PieceColor.White), Is.True);
             Assert.That(p.Castling, Is.EqualTo(CastlingRights.None));
             // Une seule invocation par partie.

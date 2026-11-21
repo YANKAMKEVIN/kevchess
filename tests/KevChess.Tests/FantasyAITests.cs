@@ -73,10 +73,10 @@ namespace KevChess.Tests
         }
 
         [Test]
-        public void SummonsDragonWhenGaugeIsFull()
+        public void SummonsDragonWhenAffordable()
         {
             var p = FantasyPosition.FromFen("r3k3/ppp5/8/8/8/8/PPP5/R3K3 w - - 0 1", NoEvents());
-            p.SetEnergy(PieceColor.White, 10);
+            p.SetEnergy(PieceColor.White, p.Config.SummonCost);
             var r = Analyze(p, 3);
             Assert.That(r.BestAction.Power, Is.EqualTo(PowerKind.Summon), r.ToString());
         }
@@ -155,14 +155,31 @@ namespace KevChess.Tests
         }
 
         [Test, Explicit("Équilibrage : auto-parties IA contre IA, statistiques d'usage des pouvoirs")]
-        public void SelfPlayBalance()
+        public void SelfPlayBalance() => SelfPlay(FantasyConfig.Default, 30);
+
+        [Explicit("Équilibrage : balayage du coût d'invocation du dragon (2026-11-21 : 10 → 6)")]
+        [TestCase(4, 30), TestCase(5, 30), TestCase(6, 30), TestCase(7, 30), TestCase(8, 30), TestCase(10, 30)]
+        [TestCase(5, 60), TestCase(6, 60)]
+        public void SummonCostSweep(int cost, int games)
         {
-            int games = 30, white = 0, black = 0, draws = 0, plies = 0;
+            var cfg = FantasyConfig.Default;
+            cfg.SummonCost = cost;
+            TestContext.WriteLine("coût d'invocation : " + cost + ", " + games + " parties");
+            SelfPlay(cfg, games);
+        }
+
+        /// <summary>
+        /// Parties IA Fort contre IA Fort (40 ms par action, graines fixes) ; écrit résultats et usage des pouvoirs.
+        /// La recherche est limitée en temps : les chiffres varient un peu d'une machine à l'autre.
+        /// </summary>
+        static void SelfPlay(FantasyConfig config, int games)
+        {
+            int white = 0, black = 0, draws = 0, plies = 0;
             var counts = new System.Collections.Generic.Dictionary<string, int>();
             void Count(string k) { counts.TryGetValue(k, out int n); counts[k] = n + 1; }
             for (int g = 0; g < games; g++)
             {
-                var game = new FantasyGame((ulong)(1000 + g));
+                var game = new FantasyGame((ulong)(1000 + g), config);
                 var ais = new[] { new FantasyAI(8, 10 + g), new FantasyAI(8, 50 + g) };
                 for (int i = 0; i < 200 && !game.IsOver; i++)
                 {

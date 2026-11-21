@@ -1,5 +1,6 @@
 using System;
 using System.Threading;
+using KevChess.AI.Uci;
 using KevChess.Core;
 using KevChess.Core.Ux;
 using KevChess.Game.Audio;
@@ -15,7 +16,7 @@ namespace KevChess.Game.UI
     {
         const float ToastSeconds = 1.8f;
 
-        GameObject localOverlay, settingsOverlay, puzzlesOverlay, actionsOverlay;
+        GameObject localOverlay, settingsOverlay, licensesOverlay, puzzlesOverlay, actionsOverlay;
 
         // Partie à deux.
         int localClockChoice;
@@ -23,7 +24,7 @@ namespace KevChess.Game.UI
         Button localFlipButton;
 
         // Réglages.
-        Button soundButton, hapticsButton, contrastButton, notationButton, animButton, musicButton, flipButton;
+        Button soundButton, hapticsButton, contrastButton, notationButton, animButton, musicButton, flipButton, engineButton;
         Button[] themeButtons;
         Text volumeLabel;
         VolumeSlider volumeSlider;
@@ -49,7 +50,7 @@ namespace KevChess.Game.UI
         float toastUntil;
 
         bool IsScreenOverlayOpen =>
-            localOverlay.activeSelf || settingsOverlay.activeSelf || puzzlesOverlay.activeSelf || actionsOverlay.activeSelf ||
+            localOverlay.activeSelf || settingsOverlay.activeSelf || licensesOverlay.activeSelf || puzzlesOverlay.activeSelf || actionsOverlay.activeSelf ||
             analysisOverlay.activeSelf || moveListOverlay.activeSelf;
 
         /// <summary>Musique d'ambiance pilotée par l'écran Réglages (créée par KevChessApp).</summary>
@@ -61,6 +62,7 @@ namespace KevChess.Game.UI
             if (moveListOverlay.activeSelf) { Show(moveListOverlay, false); return true; }
             if (actionsOverlay.activeSelf) { Show(actionsOverlay, false); return true; }
             if (analysisOverlay.activeSelf) { CloseAnalysis(); return true; }
+            if (licensesOverlay.activeSelf) { Show(licensesOverlay, false); Show(settingsOverlay, true); return true; }
             if (settingsOverlay.activeSelf) { Show(settingsOverlay, false); ShowMenu(true); return true; }
             if (puzzlesOverlay.activeSelf)
             {
@@ -183,6 +185,8 @@ namespace KevChess.Game.UI
             // Choix à plusieurs valeurs : valeur affichée à droite, toucher pour changer.
             notationButton = ValueSetting(card, "Notation", "Notation", () => { GamePrefs.FrenchNotation = !GamePrefs.FrenchNotation; Refresh(); });
             animButton = ValueSetting(card, "Animations", "Animations", () => GamePrefs.AnimationIndex = (GamePrefs.AnimationIndex + 1) % GamePrefs.AnimationNames.Length);
+            engineButton = ValueSetting(card, "Engine", "Moteur de l'IA", () =>
+                GamePrefs.Engine = GamePrefs.Engine == EngineKind.Stockfish ? EngineKind.KevChess : EngineKind.Stockfish);
 
             var tipsAgain = UIKit.Button("TipsAgain", card, "Revoir les gestes du plateau", () =>
             {
@@ -194,7 +198,29 @@ namespace KevChess.Game.UI
             }, UIKit.Cyan, 34);
             UIKit.Size(tipsAgain, 88);
 
+            var licenses = UIKit.Button("Licenses", card, "Licences (Stockfish, GPL v3)", () =>
+            {
+                sfx.Play(Sfx.Click);
+                Show(settingsOverlay, false);
+                Show(licensesOverlay, true);
+            }, UIKit.TextDim, 30);
+            UIKit.Size(licenses, 76);
+            BuildLicenses();
+
             var back = UIKit.Button("Back", card, "Retour", () => { sfx.Play(Sfx.Click); Show(settingsOverlay, false); ShowMenu(true); }, UIKit.Magenta);
+            UIKit.Size(back, 104);
+        }
+
+        /// <summary>Écran « Licences » : notice de Stockfish (GPL v3) et lien vers son code source exact.</summary>
+        void BuildLicenses()
+        {
+            licensesOverlay = Overlay("Licenses", out var card, 900, 1300, UIKit.Cyan);
+            UIKit.VStack(card, 16, 44);
+            FitHeight(card);
+            UIKit.Size(UIKit.Label("Title", card, "Licences", 72, UIKit.Cyan, TextAnchor.MiddleCenter, FontStyle.Bold), 96);
+            var notice = UIKit.Label("Notice", card, StockfishBundle.Notice, 30, UIKit.Text, TextAnchor.UpperLeft);
+            UIKit.Size(notice, 860);
+            var back = UIKit.Button("Back", card, "Retour", () => { sfx.Play(Sfx.Click); Show(licensesOverlay, false); Show(settingsOverlay, true); }, UIKit.Magenta);
             UIKit.Size(back, 104);
         }
 
@@ -289,6 +315,8 @@ namespace KevChess.Game.UI
             UIKit.SetSwitch(flipButton, GamePrefs.AutoFlip, UIKit.Cyan);
             UIKit.SetRowValue(notationButton, GamePrefs.FrenchNotation ? "française (C, F, T, D, R)" : "anglaise (N, B, R, Q, K)");
             UIKit.SetRowValue(animButton, GamePrefs.AnimationNames[GamePrefs.AnimationIndex]);
+            UIKit.SetRowValue(engineButton, GamePrefs.Engine == EngineKind.KevChess ? "KevChess (intégrée)"
+                : AIAdapter.StockfishUsable ? "Stockfish" : "Stockfish absent : KevChess");
         }
 
         // ---------------------------------------------------------------- Puzzles
