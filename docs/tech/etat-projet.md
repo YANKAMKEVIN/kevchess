@@ -2,7 +2,7 @@
 
 Jeu d'échecs 3D original pour Android, iOS et macOS. Direction artistique « cristal / néon », tout généré par code (aucun modèle ni son importé).
 
-Dernière mise à jour : 2026-11-02.
+Dernière mise à jour : 2026-11-21.
 
 Dépôt : https://github.com/YANKAMKEVIN/kevchess (privé).
 
@@ -73,6 +73,19 @@ Visuels et son : 4 thèmes `VisualTheme` (Néon, Aurore, Émeraude, Glace & Brai
 Interface : horloge dans les cartes (alerte sous 10 s) et choix de la cadence ; mode revue ⏮ ◀ ▶ ⏭ (+ « Reprendre d'ici ») ; écran d'analyse (toucher une gaffe → revue avec flèche du meilleur coup) ; puzzles (liste, progression, indice, suivant) ; Réglages (son, vibrations, thème, lisibilité, notation, vitesse, musique + volume, caméra qui se retourne en partie à deux) ; statistiques par niveau d'IA ; proposer nulle ; copier le PGN ; « L'IA réfléchit… » ; nom de l'ouverture. Actions secondaires dans « Plus… » (barre du bas).
 Vérifié : 195 tests (avant fusion des Légendes), autotest Mac étendu vert (revue, analyse, mat animé, chute au temps, nulle, PGN, puzzle juste et faux, changement de thème, partie 3+2 contre l'IA), captures en portrait regardées. Android (A17, APK depuis main avec les Légendes) : nouveau menu (Légendes, Puzzles, Réglages), liste des puzzles, puzzle 1 résolu au glisser (Ta8#, « Résolu ! »). Corrigé après cette recette : en puzzle, les rangées de pièces prises montraient toutes les pièces absentes du jeu complet ; elles comptent maintenant depuis la position de départ de la partie (`BoardView.SetTrayBaseline`). Non vérifié : sons et musique à l'oreille (synthétisés, jamais écoutés), recette tactile complète des nouveaux écrans sur téléphone.
 
+## Auto-parties du mode Légendes (2026-11-21)
+
+Test explicite `FantasyAITests.SelfPlayBalance` (30 parties IA Fort contre IA Fort, 40 ms par action, graines fixes), lancé hors Unity :
+`dotnet test tests/KevChess.Tests --filter Name=SelfPlayBalance --logger "console;verbosity=detailed"` (≈ 80 s).
+
+| Mesure | Résultat |
+|---|---|
+| Résultats | blancs 17, noirs 13, 0 nulle ; 66 demi-coups en moyenne, toutes les parties finies par mat |
+| Pouvoirs par partie | Bouclier 5,5 ; Gel 3,7 ; Téléportation 1,3 ; Invocation du dragon 0,2 ; Souffle 0,1 |
+| Événements par partie | fissures 5,1 ; portails 2,6 ; gisements 2,0 |
+
+Constat : le dragon n'apparaît presque jamais (5 invocations en 30 parties) : l'IA dépense ses éclats en Boucliers et Gels avant d'atteindre 10. Aucune valeur n'a été changée (décision de game design) ; pistes à trancher par Kevin : invocation moins chère (8 ?), ou jauge qui garde une réserve, ou IA qui épargne quand une tour est disponible.
+
 ## Builds et recette (2026-10-31)
 
 Licence Unity Personal active (activée en CLI : `unity auth login` puis `unity license activate --personal --accept-eula`).
@@ -116,6 +129,6 @@ Pièges rencontrés :
 - [ ] Module iOS + build Xcode
 - [ ] V1.1 : Stockfish via `IChessEngine` (AIAdapter est le seul point à changer)
 - [x] Glisser-déposer, pièces prises en 3D, vibrations
-- [ ] Mode Légendes (`docs/design/mode-fantastique.md`, branche `feature/legendes`) : règles, plateau vivant, IA, personnages procéduraux, duels de capture, plateau vivant visuel et interface faits ; bouton « Légendes » dans le menu. Recette : `-kevchess-legends-autotest <dossier>`. Recette Android 2026-11-02 sur le Galaxy A17 (APK IL2CPP 36 Mo) : autotest Légendes vert (duel, invocation, Bouclier, Gel, téléportation, plateau vivant, partie contre l'IA ; IA Moyen profondeur 5 en ≈ 0,2 s par coup). Sur Android, `-kevchess-legends-autotest` se passe par `adb shell am start ... -e unity "-kevchess-legends-autotest"` ; ses captures restent dans le stockage privé de l'app (non debuggable) : faire des `adb exec-out screencap` pendant le test. À revoir : plateau petit en portrait sur l'A17 (barre des pouvoirs en plus du bandeau). Reste : S24, équilibrage par auto-parties IA contre IA, retouches visuelles (chevalier, sentinelle, reflets des personnages). IA : profondeur 9 en 0,5 s au départ (classique 10), 6 en milieu de partie avec pouvoirs
+- [ ] Mode Légendes (`docs/design/mode-fantastique.md`) : **fusionné dans `main`** (la branche `feature/legendes` n'a plus aucun commit d'avance, vérifié le 2026-11-21 ; ses tests passent avec le reste). Il reste l'équilibrage (décision de Kevin, voir « Auto-parties du mode Légendes ») et la recette S24. Historique : règles, plateau vivant, IA, personnages procéduraux, duels de capture, plateau vivant visuel et interface faits ; bouton « Légendes » dans le menu. Recette : `-kevchess-legends-autotest <dossier>`. Recette Android 2026-11-02 sur le Galaxy A17 (APK IL2CPP 36 Mo) : autotest Légendes vert (duel, invocation, Bouclier, Gel, téléportation, plateau vivant, partie contre l'IA ; IA Moyen profondeur 5 en ≈ 0,2 s par coup). Sur Android, `-kevchess-legends-autotest` se passe par `adb shell am start ... -e unity "-kevchess-legends-autotest"` ; ses captures restent dans le stockage privé de l'app (non debuggable) : faire des `adb exec-out screencap` pendant le test. À revoir : plateau petit en portrait sur l'A17 (barre des pouvoirs en plus du bandeau). Reste : S24, équilibrage par auto-parties IA contre IA, retouches visuelles (chevalier, sentinelle, reflets des personnages). IA : profondeur 9 en 0,5 s au départ (classique 10), 6 en milieu de partie avec pouvoirs
 - [x] Horloge, thèmes, analyse de partie, export PGN, puzzles, réglages (les 20 améliorations)
 - [ ] Écouter les sons et la musique d'ambiance, recette tactile des nouveaux écrans sur téléphone
