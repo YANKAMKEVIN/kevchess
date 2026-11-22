@@ -4,7 +4,7 @@ using NUnit.Framework;
 
 namespace KevChess.Tests
 {
-    /// <summary>Code de KevChess publié sous GPL v3 : fichier LICENSE, README et écran « Licences ».</summary>
+    /// <summary>Code de KevChess publié sous GPL v3 ou ultérieure : fichier LICENSE, README et écran « Licences ».</summary>
     public class KevChessLicenseTests
     {
         static string RepoRoot()
@@ -33,6 +33,8 @@ namespace KevChess.Tests
         {
             var readme = File.ReadAllText(Path.Combine(RepoRoot(), "README.md"));
             Assert.That(readme, Does.Contain("GNU General Public License version 3"));
+            Assert.That(readme, Does.Contain("toute version ultérieure"));
+            Assert.That(readme, Does.Contain("GPL-3.0-or-later"));
             Assert.That(readme, Does.Contain("(LICENSE)"));
             Assert.That(readme, Does.Contain("Stockfish"));
             Assert.That(readme, Does.Contain("THIRD_PARTY_NOTICES.md"));
@@ -44,10 +46,12 @@ namespace KevChess.Tests
             var full = KevChessLicense.FullNotice;
             Assert.That(full, Does.StartWith(KevChessLicense.Notice));
             Assert.That(full, Does.EndWith(StockfishBundle.Notice));
-            Assert.That(KevChessLicense.Notice, Does.Contain("GPL v3"));
+            Assert.That(KevChessLicense.Notice, Does.Contain("version 3 ou (à votre choix) toute version ultérieure"));
+            Assert.That(KevChessLicense.Notice, Does.Contain("GPL v3 ou ultérieure"));
             Assert.That(KevChessLicense.Notice, Does.Contain(KevChessLicense.SourceUrl));
             Assert.That(KevChessLicense.Notice, Does.Contain(KevChessLicense.Copyright));
-            Assert.That(KevChessLicense.Spdx, Is.EqualTo("GPL-3.0-only"));
+            Assert.That(KevChessLicense.Spdx, Is.EqualTo("GPL-3.0-or-later"));
+            Assert.That(KevChessLicense.SourceUrl, Is.EqualTo("https://github.com/YANKAMKEVIN/kevchess"));
         }
     }
 }
