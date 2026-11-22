@@ -397,6 +397,68 @@ namespace KevChess.Tests
             fake.Frozen = true;
             Assert.Throws<TimeoutException>(() => engine.FindMove(Position.Start(), "position startpos", new EngineOptions { MoveTimeMs = 20 }, CancellationToken.None));
             Assert.That(engine.IsBroken, Is.True);
+            Assert.That(fake.Disposed, Is.True, "un moteur hors service est fermé tout de suite (il ne servira plus)");
+        }
+
+        [Test]
+        public void SilentHandshakeClosesTheTransport()
+        {
+            var fake = new FakeUciEngine { Frozen = true };
+            var engine = new UciEngine(fake) { HandshakeTimeoutMs = 50 };
+            Assert.Throws<TimeoutException>(() => engine.Initialize());
+            Assert.That(fake.Disposed, Is.True);
+        }
+
+        /// <summary>
+        /// Vrai processus figé en pleine recherche, sourd au « stop » : une fois le moteur déclaré hors service,
+        /// le processus est tué au lieu de tourner (et de vider la batterie) jusqu'à la fermeture de l'app.
+        /// </summary>
+        [Test]
+        public void StuckProcessIsKilledOnceBroken()
+        {
+            if (!File.Exists("/bin/sh")) Assert.Ignore("/bin/sh absent");
+            string dir = Path.Combine(Path.GetTempPath(), "kevchess-stuck-uci-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            string script = Path.Combine(dir, "engine.sh"), pidFile = Path.Combine(dir, "pid");
+            File.WriteAllText(script,
+                "echo $$ > \"" + pidFile + "\"\n" +
+                "while read cmd rest; do\n" +
+                "  case \"$cmd\" in\n" +
+                "    uci) echo 'uciok';;\n" +
+                "    isready) echo 'readyok';;\n" +
+                "    go) while :; do :; done;;\n" +
+                "  esac\n" +
+                "done\n");
+            int pid = -1;
+            try
+            {
+                var engine = new UciEngine(new ProcessUciTransport("/bin/sh", "\"" + script + "\"")) { GraceMs = 20, StopTimeoutMs = 100 };
+                engine.Initialize();
+                pid = int.Parse(File.ReadAllText(pidFile).Trim());
+                Assert.Throws<TimeoutException>(() => engine.FindMove(Position.Start(), "position startpos", new EngineOptions { MoveTimeMs = 20 }, CancellationToken.None));
+                Assert.That(engine.IsBroken, Is.True);
+                Assert.That(ProcessIsAlive(pid), Is.False, "le moteur figé doit être tué");
+            }
+            finally
+            {
+                if (pid > 0 && ProcessIsAlive(pid)) try { System.Diagnostics.Process.GetProcessById(pid).Kill(); } catch (Exception) { }
+                Directory.Delete(dir, true);
+            }
+        }
+
+        static bool ProcessIsAlive(int pid)
+        {
+            try
+            {
+                using (var p = System.Diagnostics.Process.GetProcessById(pid))
+                {
+                    if (p.HasExited) return false;
+                    p.WaitForExit(1000); // laisse au kill le temps d'aboutir
+                    return !p.HasExited;
+                }
+            }
+            catch (ArgumentException) { return false; }
+            catch (InvalidOperationException) { return false; }
         }
 
         [Test]
