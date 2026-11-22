@@ -157,7 +157,7 @@ namespace KevChess.Tests
         [Test, Explicit("Équilibrage : auto-parties IA contre IA, statistiques d'usage des pouvoirs")]
         public void SelfPlayBalance() => SelfPlay(FantasyConfig.Default, 30);
 
-        [Explicit("Équilibrage : balayage du coût d'invocation du dragon (2026-11-21 : 10 → 6)")]
+        [Explicit("Équilibrage : balayage du coût d'invocation du dragon (2026-11-21 : 10 → 5)")]
         [TestCase(4, 30), TestCase(5, 30), TestCase(6, 30), TestCase(7, 30), TestCase(8, 30), TestCase(10, 30)]
         [TestCase(5, 60), TestCase(6, 60)]
         public void SummonCostSweep(int cost, int games)
