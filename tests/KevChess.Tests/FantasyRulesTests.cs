@@ -163,6 +163,23 @@ namespace KevChess.Tests
             Assert.That(Legal(p).Any(a => a.Power == PowerKind.Freeze && a.From == Sq("e1") && Square.Rank(a.To) == 0), Is.False);
         }
 
+        [TestCase("4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1", PieceColor.White, "h1", "g1", "c1")]
+        [TestCase("4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1", PieceColor.White, "a1", "c1", "g1")]
+        [TestCase("r3k2r/8/8/8/8/8/8/4K3 b kq - 0 1", PieceColor.Black, "h8", "g8", "c8")]
+        [TestCase("r3k2r/8/8/8/8/8/8/4K3 b kq - 0 1", PieceColor.Black, "a8", "c8", "g8")]
+        public void FrozenRookCannotCastle(string fen, PieceColor side, string frozenRook, string blocked, string stillAllowed)
+        {
+            // § 2.3 : la pièce gelée ne bouge pas pendant le tour ; le roque déplace la tour.
+            var p = Pos(fen);
+            p.SetFrozen(side, Sq(frozenRook));
+            var castles = Legal(p).Where(a => a.IsCastle).Select(a => a.To).ToList();
+            Assert.That(castles, Does.Not.Contain(Sq(blocked)), "roque avec la tour gelée");
+            Assert.That(castles, Does.Contain(Sq(stillAllowed)), "l'autre roque reste permis");
+            Assert.That(p.Castling & (side == PieceColor.White ? CastlingRights.WhiteKingSide | CastlingRights.WhiteQueenSide
+                : CastlingRights.BlackKingSide | CastlingRights.BlackQueenSide), Is.Not.EqualTo(CastlingRights.None),
+                "le gel ne retire pas le droit de roque, il le suspend le temps du tour");
+        }
+
         // ---------- Téléportation ----------
 
         [Test]

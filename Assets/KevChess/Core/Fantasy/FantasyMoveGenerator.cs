@@ -374,12 +374,15 @@ namespace KevChess.Core.Fantasy
             if ((pos.Castling & (kingSide | queenSide)) == 0) return;
             if (pos.IsSquareAttacked(from, them)) return;
 
-            if ((pos.Castling & kingSide) != 0
+            // Une tour gelée ne bouge pas, roque compris (§ 2.3 : « ni coup, ni Téléportation, ni Souffle »).
+            int frozen = pos.FrozenSquare(us);
+
+            if ((pos.Castling & kingSide) != 0 && frozen != from + 3
                 && pos[from + 1] == Piece.Empty && pos[from + 2] == Piece.Empty
                 && !pos.IsSquareAttacked(from + 1, them))
                 list.Add(new FantasyAction(from, from + 2, MoveFlags.Castle));
 
-            if ((pos.Castling & queenSide) != 0
+            if ((pos.Castling & queenSide) != 0 && frozen != from - 4
                 && pos[from - 1] == Piece.Empty && pos[from - 2] == Piece.Empty && pos[from - 3] == Piece.Empty
                 && !pos.IsSquareAttacked(from - 1, them))
                 list.Add(new FantasyAction(from, from - 2, MoveFlags.Castle));
