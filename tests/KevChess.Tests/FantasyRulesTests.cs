@@ -307,6 +307,20 @@ namespace KevChess.Tests
         }
 
         [Test]
+        public void EnPassantNeverLandsOnChasm()
+        {
+            // Le pion blanc survole le gouffre e3 (permis) ; le pion noir de d4 ne peut pas prendre en passant
+            // en s'arrêtant sur e3. Sans gouffre, la prise reste possible.
+            foreach (bool chasm in new[] { true, false })
+            {
+                var p = Pos("4k3/8/8/8/3p4/8/4P3/4K3 w - - 0 1");
+                if (chasm) p.AddChasm(Sq("e3"), 6);
+                Assert.That(p.MakeAction(new FantasyAction(Sq("e2"), Sq("e4"), MoveFlags.DoublePush)), Is.True);
+                Assert.That(Legal(p).Any(a => a.IsEnPassant), Is.EqualTo(!chasm), chasm ? "en passant sur un gouffre" : "en passant normal");
+            }
+        }
+
+        [Test]
         public void KingNeverStopsOnFissure()
         {
             var p = Pos("4k3/8/8/8/8/8/8/4K3 w - - 0 1");

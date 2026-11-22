@@ -276,8 +276,9 @@ namespace KevChess.Core.Fantasy
                     if (Square.Rank(to) == promoRank) AddPromotions(from, to, MoveFlags.Capture, list);
                     else list.Add(new FantasyAction(from, to, MoveFlags.Capture));
                 }
-                else if (to == pos.EnPassantSquare)
+                else if (to == pos.EnPassantSquare && !pos.IsChasm(to))
                 {
+                    // Le double pas peut survoler un gouffre, mais la prise en passant s'y arrêterait : interdite.
                     int capSq = us == PieceColor.White ? to - 8 : to + 8;
                     if (pos.ShieldSquare(them) != capSq)
                         list.Add(new FantasyAction(from, to, MoveFlags.Capture | MoveFlags.EnPassant));
