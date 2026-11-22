@@ -58,6 +58,8 @@ garantie implicite de qualité marchande ou d'adéquation à un usage particulie
 **Conséquence pour KevChess :** l'application distribuée avec Stockfish relève, dans son ensemble, de la
 GPL v3. Quiconque reçoit l'APK doit pouvoir obtenir le code source correspondant (celui de Stockfish
 ci-dessus et celui de KevChess) sous la même licence.
+Le code de KevChess est publié sous GPL v3 (fichier `LICENSE` à la racine,
+https://github.com/YANKAMKEVIN/kevchess).
 
-La même notice s'affiche dans l'app : Réglages → « Licences (Stockfish, GPL v3) »
-(`KevChess.AI.Uci.StockfishBundle.Notice`).
+La même notice s'affiche dans l'app, après celle de KevChess : Réglages → « Licences : KevChess et
+Stockfish (GPL v3) » (`KevChess.AI.Uci.KevChessLicense.FullNotice`).
