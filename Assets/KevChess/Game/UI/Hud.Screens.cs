@@ -198,7 +198,7 @@ namespace KevChess.Game.UI
             }, UIKit.Cyan, 34);
             UIKit.Size(tipsAgain, 88);
 
-            var licenses = UIKit.Button("Licenses", card, "Licences (Stockfish, GPL v3)", () =>
+            var licenses = UIKit.Button("Licenses", card, "Licences : KevChess et Stockfish (GPL v3)", () =>
             {
                 sfx.Play(Sfx.Click);
                 Show(settingsOverlay, false);
@@ -211,15 +211,18 @@ namespace KevChess.Game.UI
             UIKit.Size(back, 104);
         }
 
-        /// <summary>Écran « Licences » : notice de Stockfish (GPL v3) et lien vers son code source exact.</summary>
+        /// <summary>
+        /// Écran « Licences » (tient lieu d'« À propos ») : KevChess sous GPL v3 avec le lien de son code source,
+        /// puis la notice de Stockfish (GPL v3) et le lien vers son code source exact.
+        /// </summary>
         void BuildLicenses()
         {
             licensesOverlay = Overlay("Licenses", out var card, 900, 1300, UIKit.Cyan);
             UIKit.VStack(card, 16, 44);
             FitHeight(card);
             UIKit.Size(UIKit.Label("Title", card, "Licences", 72, UIKit.Cyan, TextAnchor.MiddleCenter, FontStyle.Bold), 96);
-            var notice = UIKit.Label("Notice", card, StockfishBundle.Notice, 30, UIKit.Text, TextAnchor.UpperLeft);
-            UIKit.Size(notice, 860);
+            var notice = UIKit.Label("Notice", card, KevChessLicense.FullNotice, 26, UIKit.Text, TextAnchor.UpperLeft);
+            UIKit.Size(notice, 1040);
             var back = UIKit.Button("Back", card, "Retour", () => { sfx.Play(Sfx.Click); Show(licensesOverlay, false); Show(settingsOverlay, true); }, UIKit.Magenta);
             UIKit.Size(back, 104);
         }

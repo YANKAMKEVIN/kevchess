@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using KevChess.Core;
 using KevChess.Core.Fantasy;
+using KevChess.Core.Ux;
 using KevChess.Game.Audio;
 using KevChess.Game.CameraRig;
 using KevChess.Game.Match;
@@ -51,8 +52,11 @@ namespace KevChess.Game.Legends
         Text alertTitle, alertDetail, alertMore;
         bool alertExpanded;
         // Pouvoirs
-        GameObject powerGroup;
-        Text powerCaption, powerHint;
+        GameObject powerGroup, powerCards;
+        RectTransform powerGroupRect;
+        Text powerCaption, powerHint, powerPerTurn;
+        Button foldButton;
+        bool powersCollapsed; // barre repliée (GamePrefs, voir PowerBarFold)
         readonly Dictionary<LegendsTool, PowerCard> cards = new Dictionary<LegendsTool, PowerCard>();
         // Confirmation
         GameObject confirmBox;
@@ -89,6 +93,7 @@ namespace KevChess.Game.Legends
             public Button Button;
             public Image Background;
             public Text Name, State;
+            public string Label;
             public Color Accent;
         }
 
@@ -116,6 +121,7 @@ namespace KevChess.Game.Legends
             safeRoot = UIKit.Rect("SafeArea", transform);
             UIKit.Stretch(safeRoot);
 
+            powersCollapsed = GamePrefs.LegendsPowersCollapsed;
             BuildTop();
             BuildBottom();
             BuildSetup();
@@ -212,16 +218,22 @@ namespace KevChess.Game.Legends
             UIKit.Button("View", bar, "Vue 3D", OnViewPressed, UIKit.TextDim, 30);
 
             // Cartes de pouvoir.
+            // Cartes de pouvoir, repliables (en portrait, la place va au plateau).
             var group = UIKit.Rect("Powers", safeRoot);
-            UIKit.Anchor(group, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0, 156), new Vector2(1000, 230));
+            UIKit.Anchor(group, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0, PowerBarFold.Bottom), new Vector2(1000, PowerBarFold.ExpandedHeight));
             powerGroup = group.gameObject;
-            powerCaption = UIKit.Label("Caption", group, "Pouvoir facultatif, puis votre coup", 28, UIKit.Text, TextAnchor.UpperLeft, FontStyle.Bold);
-            UIKit.Anchor(powerCaption.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(4, 0), new Vector2(760, 40));
-            var perTurn = UIKit.Label("PerTurn", group, "1 par tour", 24, UIKit.TextDim, TextAnchor.UpperRight);
-            UIKit.Anchor(perTurn.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-4, 0), new Vector2(240, 40));
+            powerGroupRect = group;
+            powerCaption = UIKit.Label("Caption", group, PowerBarFold.Caption(false, 0, null), 28, UIKit.Text, TextAnchor.UpperLeft, FontStyle.Bold);
+            UIKit.Anchor(powerCaption.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(4, 0), new Vector2(580, 40));
+            powerCaption.horizontalOverflow = HorizontalWrapMode.Overflow;
+            powerPerTurn = UIKit.Label("PerTurn", group, "1 par tour", 24, UIKit.TextDim, TextAnchor.UpperRight);
+            UIKit.Anchor(powerPerTurn.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-196, 0), new Vector2(180, 40));
+            foldButton = UIKit.Button("Fold", group, PowerBarFold.ToggleLabel(powersCollapsed), TogglePowerFold, UIKit.TextDim, 24);
+            UIKit.Anchor((RectTransform)foldButton.transform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(0, 2), new Vector2(180, 52));
             var row = UIKit.Rect("Cards", group);
-            UIKit.Anchor(row, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -48), new Vector2(1000, 128));
+            UIKit.Anchor(row, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -60), new Vector2(1000, 120));
             UIKit.HStack(row, 12);
+            powerCards = row.gameObject;
             var ice = new Color(0.62f, 0.86f, 1f);
             AddCard(row, LegendsTool.Shield, "Bouclier", ice);
             AddCard(row, LegendsTool.Freeze, "Gel", ice);
@@ -251,7 +263,8 @@ namespace KevChess.Game.Legends
             ((Image)confirmYes.targetGraphic).color = UIKit.Cyan * new Color(0.55f, 0.55f, 0.55f, 1f);
             confirmBox.SetActive(false);
 
-            strips[1] = BuildStrip(safeRoot, "BottomStrip", 404, true);
+            strips[1] = BuildStrip(safeRoot, "BottomStrip", PowerBarFold.StripBottom(powersCollapsed), true);
+            ApplyPowerFold();
 
             // Légende du duel (à la place des commandes pendant la mise en scène).
             var duel = UIKit.Panel("Duel", safeRoot, Surface, true, Border);
@@ -274,13 +287,34 @@ namespace KevChess.Game.Legends
             }, accent, 26);
             var old = b.GetComponentInChildren<Text>();
             if (old != null) old.gameObject.SetActive(false);
-            var card = new PowerCard { Button = b, Background = (Image)b.targetGraphic, Accent = accent };
+            var card = new PowerCard { Button = b, Background = (Image)b.targetGraphic, Accent = accent, Label = label };
             card.Name = UIKit.Label("Name", b.transform, label, 28, UIKit.Text, TextAnchor.UpperLeft, FontStyle.Bold);
             UIKit.Stretch(card.Name.rectTransform, 16, 56, 8, 14);
             card.State = UIKit.Label("State", b.transform, "", 22, UIKit.TextDim, TextAnchor.UpperLeft);
             UIKit.Stretch(card.State.rectTransform, 16, 10, 8, 66);
             card.State.horizontalOverflow = HorizontalWrapMode.Overflow;
             cards[tool] = card;
+        }
+
+        void TogglePowerFold()
+        {
+            sfx.Play(Sfx.Click);
+            powersCollapsed = !powersCollapsed;
+            GamePrefs.LegendsPowersCollapsed = powersCollapsed;
+            ApplyPowerFold();
+            Refresh();
+            ApplyBoardFrame(true);
+        }
+
+        /// <summary>Hauteur de la barre, cartes et aide visibles ou non, carte de votre camp juste au-dessus.</summary>
+        void ApplyPowerFold()
+        {
+            powerGroupRect.sizeDelta = new Vector2(1000, PowerBarFold.Height(powersCollapsed));
+            powerCards.SetActive(!powersCollapsed);
+            powerHint.gameObject.SetActive(!powersCollapsed);
+            powerPerTurn.gameObject.SetActive(!powersCollapsed);
+            UIKit.SetButtonText(foldButton, PowerBarFold.ToggleLabel(powersCollapsed));
+            strips[1].Panel.rectTransform.anchoredPosition = new Vector2(0, PowerBarFold.StripBottom(powersCollapsed));
         }
 
         void OnViewPressed()
@@ -419,12 +453,16 @@ namespace KevChess.Game.Legends
             bool dragon = false;
             for (int sq = 0; sq < 64 && !dragon; sq++) dragon = pos[sq] == Piece.Make(side, FantasyPiece.Dragon);
 
+            int availableCount = 0;
+            string activeName = null;
             foreach (var kv in cards)
             {
                 var tool = kv.Key;
                 var c = kv.Value;
                 bool available = interaction.IsToolAvailable(tool);
                 bool active = interaction.Tool == tool;
+                if (available && (tool != LegendsTool.Breath || dragon)) availableCount++;
+                if (active) activeName = c.Label;
                 string state;
                 switch (tool)
                 {
@@ -448,6 +486,7 @@ namespace KevChess.Game.Legends
             }
 
             powerHint.text = ToolHint(interaction.Tool, interaction.IsTargeting, interaction.ArmedSquare);
+            powerCaption.text = PowerBarFold.Caption(powersCollapsed, availableCount, activeName);
             bool showPowers = humanTurn && !interaction.IsConfirming && !IsDuelShowing;
             powerGroup.SetActive(showPowers);
         }
