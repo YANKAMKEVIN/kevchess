@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using KevChess.AI.Uci;
 using KevChess.Core;
+using KevChess.Core.Ux;
 using KevChess.Game.Match;
 using KevChess.Game.View;
 using KevChess.Game.Visuals;
@@ -25,6 +26,7 @@ namespace KevChess.Game.UI
         const string StatsKey = "kevchess.stats.";
         const string TipsKey = "kevchess.tips.step";
         const string EngineKey = "kevchess.engine";
+        const string PowersFoldKey = "kevchess.legends.powers.collapsed";
 
         public static readonly string[] AnimationNames = { "lente", "normale", "rapide" };
         static readonly float[] AnimationSpeeds = { 0.5f, 1f, 2f };
@@ -76,6 +78,13 @@ namespace KevChess.Game.UI
         {
             get => PlayerPrefs.GetInt(FlipKey, 0) == 1;
             set => SetInt(FlipKey, value ? 1 : 0);
+        }
+
+        /// <summary>Mode Légendes : barre des pouvoirs repliée (mémorisé d'une partie à l'autre).</summary>
+        public static bool LegendsPowersCollapsed
+        {
+            get => PowerBarFold.FromStored(PlayerPrefs.GetInt(PowersFoldKey, PowerBarFold.ToStored(PowerBarFold.DefaultCollapsed)));
+            set => SetInt(PowersFoldKey, PowerBarFold.ToStored(value));
         }
 
         /// <summary>Moteur de l'IA adverse : IA maison (par défaut) ou Stockfish s'il est présent.</summary>
