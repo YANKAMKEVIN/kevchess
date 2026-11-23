@@ -143,7 +143,7 @@ namespace KevChess.AI.Uci
                 }
                 else if (stopSent && watch.ElapsedMilliseconds > stopDeadline)
                 {
-                    IsBroken = true;
+                    MarkBroken();
                     throw new TimeoutException("Le moteur UCI ne répond plus après « stop »");
                 }
 
@@ -173,7 +173,7 @@ namespace KevChess.AI.Uci
             {
                 if (watch.ElapsedMilliseconds > HandshakeTimeoutMs)
                 {
-                    IsBroken = true;
+                    MarkBroken();
                     throw new TimeoutException("Pas de « uciok » du moteur");
                 }
                 string line = Read(20);
@@ -205,7 +205,7 @@ namespace KevChess.AI.Uci
                 string line = Read(20);
                 if (line != null && line.Trim() == "readyok") return;
             }
-            IsBroken = true;
+            MarkBroken();
             throw new TimeoutException("Pas de « readyok » du moteur");
         }
 
@@ -214,7 +214,7 @@ namespace KevChess.AI.Uci
             try { transport.Send(command); }
             catch (Exception e) when (e is IOException || e is ObjectDisposedException || e is InvalidOperationException)
             {
-                IsBroken = true;
+                MarkBroken();
                 throw new EndOfStreamException("Le moteur UCI s'est arrêté", e);
             }
         }
@@ -222,7 +222,19 @@ namespace KevChess.AI.Uci
         string Read(int timeoutMs)
         {
             try { return transport.ReadLine(timeoutMs); }
-            catch (EndOfStreamException) { IsBroken = true; throw; }
+            catch (EndOfStreamException) { MarkBroken(); throw; }
+        }
+
+        /// <summary>
+        /// Moteur hors service : il ne sera plus jamais utilisé, on ferme donc son canal tout de suite. Un moteur figé
+        /// en pleine recherche (sourd au « stop ») continuerait sinon à tourner, et à vider la batterie, jusqu'à la
+        /// fermeture de l'app : la fermeture du transport le tue (quit, puis kill / destroy).
+        /// </summary>
+        void MarkBroken()
+        {
+            if (IsBroken) return;
+            IsBroken = true;
+            try { transport.Dispose(); } catch (Exception) { }
         }
 
         /// <summary>Résumé de la dernière recherche, pour le journal.</summary>

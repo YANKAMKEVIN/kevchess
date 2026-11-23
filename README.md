@@ -19,10 +19,11 @@ dotnet test tests/KevChess.Tests/KevChess.Tests.csproj
 
 ## Licence
 
-KevChess est un logiciel libre, publié sous la **GNU General Public License version 3** (GPL v3) :
-texte complet dans [`LICENSE`](LICENSE). Vous pouvez le redistribuer et le modifier selon ses termes ; il est
-fourni sans aucune garantie.
+KevChess est un logiciel libre, publié sous la **GNU General Public License version 3 ou (à votre choix)
+toute version ultérieure** (GPL v3 ou ultérieure, SPDX `GPL-3.0-or-later`), comme Stockfish. Copyright (C) 2026
+les auteurs de KevChess. Texte complet de la GPL v3 dans [`LICENSE`](LICENSE). Vous pouvez le redistribuer et le
+modifier selon ses termes ; il est fourni sans aucune garantie. Code source : https://github.com/YANKAMKEVIN/kevchess
 
 L'APK Android embarque **Stockfish 19**, lui aussi sous GPL v3 : auteurs, code source exact et recette de
 compilation dans [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) et [`LICENSES/`](LICENSES). Les deux notices
-s'affichent dans l'app : Réglages → « Licences : KevChess et Stockfish (GPL v3) ».
+s'affichent dans l'app : Réglages → « Licences : KevChess et Stockfish (GPL) ».
